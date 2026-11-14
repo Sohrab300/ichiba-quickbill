@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import { tryGetStaffContext } from "@/lib/auth";
 import "./globals.css";
+import "./print.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,7 @@ async function SessionNavbar() {
           displayName: staff.displayName,
           role: staff.role,
           counterCode: staff.counter?.code ?? null,
+          printWidthMm: staff.counter?.printWidthMm ?? null,
         }
       }
     />

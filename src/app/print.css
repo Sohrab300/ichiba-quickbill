@@ -1,0 +1,218 @@
+/*
+ * Receipt printing (REQUIREMENTS.md section 7). Rendered into #print-root by
+ * src/components/print/print.tsx, which also writes the @page rule for the chosen width.
+ * Thermal paper: black only, no images, monospace-friendly, body >= 11px.
+ */
+
+/* Laid out (so its height can be measured) but never visible on screen. */
+#print-root {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media print {
+  html:not(.printing-receipt) #print-root {
+    display: none;
+  }
+
+  html.printing-receipt,
+  html.printing-receipt body {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Only the receipt: not the app, not an open <dialog> (top layer), not dev overlays. */
+  html.printing-receipt body > :not(#print-root),
+  html.printing-receipt dialog {
+    display: none !important;
+  }
+
+  html.printing-receipt #print-root {
+    position: static;
+    visibility: visible;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------- */
+
+.receipt {
+  /* Printable width of the roll, centred on the page (paper width set by @page). */
+  --r-width: 72mm;
+  --r-fs: 12.5px;
+  --r-fs-small: 11px;
+  --r-fs-store: 16px;
+  --r-fs-title: 14px;
+  --r-fs-total: 22px;
+
+  width: var(--r-width);
+  margin: 0 auto;
+  color: #000;
+  background: #fff;
+  font-family: "Cascadia Mono", Consolas, "Lucida Console", "DejaVu Sans Mono", "Courier New", ui-monospace, monospace;
+  font-size: var(--r-fs);
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: auto;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.receipt[data-width="58"] {
+  --r-width: 48mm;
+  --r-fs: 11px;
+  --r-fs-small: 11px;
+  --r-fs-store: 14px;
+  --r-fs-title: 13px;
+  --r-fs-total: 18px;
+}
+
+.receipt * {
+  color: #000;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.receipt-copy {
+  /* Bottom space: the cutter sits a little above the print head. */
+  padding: 2mm 0 6mm;
+}
+
+.receipt-copy:not(:last-child) {
+  break-after: page;
+}
+
+.receipt p {
+  margin: 0;
+}
+
+.receipt .r-center {
+  text-align: center;
+}
+
+.receipt .r-left {
+  text-align: left;
+}
+
+.receipt .r-bold {
+  font-weight: 700;
+}
+
+.receipt .r-small {
+  font-size: var(--r-fs-small);
+}
+
+.receipt .r-pre {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.receipt .r-gap {
+  margin-top: 1mm;
+}
+
+.receipt .r-store {
+  font-size: var(--r-fs-store);
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.receipt .r-title {
+  font-size: var(--r-fs-title);
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+
+.receipt .r-rule {
+  height: 0;
+  margin: 1.5mm 0;
+  border: 0;
+  border-top: 1px dashed #000;
+}
+
+.receipt .r-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1ch;
+}
+
+.receipt .r-kv > :first-child {
+  flex-shrink: 0;
+}
+
+.receipt .r-kv-value {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.receipt .r-indent {
+  padding-left: 2ch;
+}
+
+.receipt .r-block {
+  margin-top: 1mm;
+}
+
+.receipt .r-total {
+  margin: 1mm 0;
+  font-size: var(--r-fs-total);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.receipt .r-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.receipt .r-table th,
+.receipt .r-table td {
+  padding: 0;
+  vertical-align: top;
+  font-weight: inherit;
+}
+
+.receipt .r-table th {
+  font-weight: 700;
+  border-bottom: 1px solid #000;
+}
+
+.receipt .r-table tfoot td {
+  border-top: 1px solid #000;
+}
+
+.receipt .r-line {
+  break-inside: avoid;
+}
+
+.receipt .r-line:not(:first-of-type) > tr:first-child > td {
+  padding-top: 0.6mm;
+}
+
+.receipt .r-table .r-num {
+  padding-left: 1ch;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.receipt .r-name {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.receipt .r-edges {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid #000;
+  font-weight: 700;
+}

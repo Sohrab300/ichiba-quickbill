@@ -1,21 +1,26 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Package, Store, LogOut } from "lucide-react";
+import { ShoppingCart, Package, Store, LogOut, Printer } from "lucide-react";
 import { signOut } from "@/lib/auth-actions";
+import type { PrintWidth } from "@/lib/print-settings";
+import { PrintSettingsDialog } from "@/components/print/PrintSettingsDialog";
 
 /** What the Navbar shows about the signed-in staff member (no ids or secrets). */
 export interface NavbarStaff {
   displayName: string;
   role: "admin" | "cashier";
   counterCode: string | null;
+  /** The counter's receipt width (counters.print_width_mm); null without a counter. */
+  printWidthMm: PrintWidth | null;
 }
 
 export function Navbar({ staff }: { staff: NavbarStaff | null }) {
   const pathname = usePathname();
   const showNav = pathname !== "/login";
+  const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
 
   const navItems = [
     { href: "/", label: "Billing", icon: ShoppingCart },
@@ -74,6 +79,19 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
             <Clock />
 
             {staff && (
+              <button
+                type="button"
+                onClick={() => setPrintSettingsOpen(true)}
+                className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                title="Printer settings"
+                aria-label="Printer settings"
+              >
+                <Printer className="h-4 w-4" />
+                <span className="hidden xl:inline">Printer</span>
+              </button>
+            )}
+
+            {staff && (
               <div className="flex min-w-0 items-center gap-2 border-l border-zinc-200 pl-2 sm:pl-4 dark:border-zinc-800">
                 <div className="min-w-0 text-right leading-tight">
                   <p className="truncate text-xs font-semibold text-zinc-900 sm:text-sm dark:text-zinc-100">
@@ -101,6 +119,14 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
           </div>
         )}
       </div>
+      {staff && (
+        <PrintSettingsDialog
+          open={printSettingsOpen}
+          onClose={() => setPrintSettingsOpen(false)}
+          counterWidth={staff.printWidthMm}
+          counterCode={staff.counterCode}
+        />
+      )}
     </header>
   );
 }

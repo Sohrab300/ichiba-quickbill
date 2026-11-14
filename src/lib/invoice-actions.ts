@@ -10,6 +10,7 @@ import { createServerClient } from "./supabase/server";
 import { MAX_INVOICE_LINES, MAX_LINE_QTY, PAYMENT_METHODS } from "./constants";
 import { invoiceJsonSchema, type Invoice } from "./invoice";
 import type { ActionResult } from "./actions";
+import { startOfTodayIst, toInvoiceNoSearchTerm } from "./invoice-search";
 
 export interface CompleteSaleResult extends ActionResult<Invoice> {
   /**
@@ -184,5 +185,92 @@ export async function getInvoiceForReprint(invoiceId: string): Promise<ActionRes
     return { success: true, data: invoice.data, statusCode: 200 };
   } catch (err: unknown) {
     return fromException(err, "Could not load the invoice.");
+  }
+}
+
+/** One row of the Print Previous Invoice list. Amounts in paise. */
+export interface RecentInvoice {
+  id: string;
+  invoiceNo: string;
+  counterCode: string;
+  /** ISO timestamp (UTC); display in Asia/Kolkata. */
+  createdAt: string;
+  grandTotal: number;
+  paymentMethod: (typeof PAYMENT_METHODS)[number];
+}
+
+const RECENT_INVOICES_LIMIT = 20;
+
+const recentInvoicesSchema = z.object({
+  search: z.string().max(100, "Search text is too long").optional(),
+});
+
+const recentInvoiceRow = z.object({
+  id: z.string().min(1),
+  invoice_no: z.string(),
+  counter_code: z.string(),
+  created_at: z.string(),
+  grand_total: z.number().int(),
+  payment_method: z.enum(PAYMENT_METHODS),
+});
+
+/**
+ * Invoices for the Print Previous Invoice dialog (REQUIREMENTS.md section 12), newest first,
+ * at most 20. Read-only.
+ *
+ * - No search: today's (IST) invoices of the caller's own counter (none for a login without one).
+ * - Search: invoices whose number contains the text (case-insensitive). Cashiers: own counter,
+ *   today only. Admins: any counter, any date.
+ */
+export async function getRecentInvoices(input: { search?: string } = {}): Promise<ActionResult<RecentInvoice[]>> {
+  const empty: ActionResult<RecentInvoice[]> = { success: true, data: [], statusCode: 200 };
+  try {
+    const staff = await getStaffContext();
+    const parsed = recentInvoicesSchema.safeParse(input ?? {});
+    if (!parsed.success) return { success: false, error: parsed.error.issues.map((i) => i.message).join("; "), statusCode: 400 };
+
+    const raw = parsed.data.search?.trim() ?? "";
+    const term = toInvoiceNoSearchTerm(raw);
+    if (raw && !term) return empty;
+
+    const anyCounterAnyDate = staff.role === "admin" && term !== "";
+    const counter = staff.counter;
+    if (!anyCounterAnyDate && !counter) return empty;
+
+    let query = createServerClient()
+      .from("invoices")
+      .select("id, invoice_no, counter_code, created_at, grand_total, payment_method")
+      .order("created_at", { ascending: false })
+      .limit(RECENT_INVOICES_LIMIT);
+    if (!anyCounterAnyDate && counter) {
+      query = query.eq("counter_id", counter.id).gte("created_at", startOfTodayIst().toISOString());
+    }
+    if (term) query = query.ilike("invoice_no", `%${term}%`);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("getRecentInvoices failed", error);
+      return { success: false, error: `Could not load invoices: ${error.message}`, statusCode: 500 };
+    }
+    const rows = z.array(recentInvoiceRow).safeParse(data);
+    if (!rows.success) {
+      console.error("Unreadable invoices rows", rows.error.issues);
+      return { success: false, error: "Could not read the invoices.", statusCode: 500 };
+    }
+    return {
+      success: true,
+      statusCode: 200,
+      data: rows.data.map((r) => ({
+        id: r.id,
+        invoiceNo: r.invoice_no,
+        counterCode: r.counter_code,
+        createdAt: r.created_at,
+        grandTotal: r.grand_total,
+        paymentMethod: r.payment_method,
+      })),
+    };
+  } catch (err: unknown) {
+    const { error, statusCode } = fromException(err, "Could not load invoices.");
+    return { success: false, error, statusCode };
   }
 }

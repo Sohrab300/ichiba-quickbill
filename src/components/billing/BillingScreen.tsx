@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, History, Loader2, Trash2 } from "lucide-react";
 import { lookupProduct } from "@/lib/actions";
 import { completeSale, getInvoiceForReprint, type CompleteSaleResult } from "@/lib/invoice-actions";
 import { addBlockedReason, cartReducer, newIdempotencyKey, saveCart, toSaleItems, type CartProduct } from "@/lib/cart";
 import { computeInvoiceTotals } from "@/lib/gst";
 import { formatINR } from "@/lib/format";
 import { playScanErrorTone, playScanSuccessBeep } from "@/lib/audio";
-import { printInvoice } from "@/lib/print";
+import { printInvoice } from "@/components/print/print";
+import { resolvePrintWidth, type PrintWidth } from "@/lib/print-settings";
 import type { Invoice } from "@/lib/invoice";
 import type { PaymentMethod } from "@/lib/constants";
 import type { Product } from "@/lib/supabase/mappers";
@@ -22,6 +23,8 @@ import { PaymentButtons, PAYMENT_OPTIONS } from "./PaymentButtons";
 import { SaleStatusPanel, type SaleStatus } from "./SaleStatusPanel";
 import { UnknownCodeDialog } from "./UnknownCodeDialog";
 import { ConfirmDialog } from "./Modal";
+import { PreviousInvoiceDialog } from "./PreviousInvoiceDialog";
+import { MobileActionsMenu } from "./MobileActionsMenu";
 
 interface BillingScreenProps {
   /** Auth user id: the saved cart is per login on this device. */
@@ -30,6 +33,8 @@ interface BillingScreenProps {
   isAdmin: boolean;
   /** null: this login has no counter and cannot complete sales. */
   counterCode: string | null;
+  /** counters.print_width_mm; this device may override it (Printer settings). */
+  printWidthMm: PrintWidth | null;
 }
 
 /** Longer than completeSale's own 20 s database timeout, so the server normally answers first. */
@@ -73,7 +78,9 @@ function isTouchOnly(): boolean {
   return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 }
 
-export default function BillingScreen({ userId, isAdmin, counterCode }: BillingScreenProps) {
+const PRINT_FAILED_HINT = "The sale is saved — use Reprint to try again.";
+
+export default function BillingScreen({ userId, isAdmin, counterCode, printWidthMm }: BillingScreenProps) {
   const canBill = counterCode !== null;
   const { cart, dispatch, cartRef, hydrated } = useCart(userId);
   const totals = useMemo(() => computeInvoiceTotals(cart.items).totals, [cart.items]);
@@ -100,8 +107,9 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [newProductCode, setNewProductCode] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"clear" | "discard" | null>(null);
+  const [previousOpen, setPreviousOpen] = useState(false);
 
-  const overlayOpen = cameraOpen || linkCode !== null || newProductCode !== null || confirm !== null;
+  const overlayOpen = cameraOpen || linkCode !== null || newProductCode !== null || confirm !== null || previousOpen;
   const overlayOpenRef = useRef(overlayOpen);
   useLayoutEffect(() => {
     overlayOpenRef.current = overlayOpen;
@@ -253,11 +261,11 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
       setCompleted(invoice);
       setReprint({ busy: false, error: null });
       playScanSuccessBeep();
-      try {
-        printInvoice(invoice);
-      } catch (err) {
-        console.error("printInvoice failed", err); // printing never affects the sale
-      }
+      // After the Completed panel paints. Printing never affects the sale: a cancelled or failed
+      // print leaves the invoice as it is, and Reprint prints it again.
+      void printInvoice(invoice, { widthMm: resolvePrintWidth(printWidthMm) }).then((printed) => {
+        if (!printed.ok) setReprint({ busy: false, error: `${printed.error} ${PRINT_FAILED_HINT}` });
+      });
     } else if (!result || result.statusUnknown) {
       setUnknownDetail(result?.error ?? "No answer from the server (connection lost or timed out).");
       playScanErrorTone();
@@ -281,8 +289,9 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
     try {
       const res = await getInvoiceForReprint(completed.id);
       if (res.success && res.data) {
-        printInvoice(res.data, { reprint: true });
-        setReprint({ busy: false, error: null });
+        // Always the copy stored in Supabase, never the one held in memory.
+        const printed = await printInvoice(res.data, { widthMm: resolvePrintWidth(printWidthMm), reprint: true });
+        setReprint({ busy: false, error: printed.ok ? null : `${printed.error} ${PRINT_FAILED_HINT}` });
       } else {
         setReprint({ busy: false, error: res.error ?? "Could not load the invoice for reprint." });
       }
@@ -347,20 +356,11 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
 
   /* ---------------------------------------------------------------------------------------- */
 
-  const clearButton = (compact: boolean) => (
-    <button
-      type="button"
-      onClick={() => setConfirm("clear")}
-      disabled={locked || cart.items.length === 0}
-      aria-label="Clear cart"
-      className={`flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white font-semibold text-zinc-800 hover:border-red-600 hover:text-red-700 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 ${
-        compact ? "w-12" : "px-4"
-      }`}
-    >
-      <Trash2 className="h-5 w-5" aria-hidden />
-      {!compact && "Clear cart"}
-    </button>
-  );
+  const clearDisabled = locked || cart.items.length === 0;
+  // Not while a sale is being saved or its outcome is unknown: that sale must be settled first.
+  const previousDisabled = !hydrated || locked;
+  const barButton =
+    "flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-4 font-semibold text-zinc-800 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 lg:h-[calc(100dvh-4rem)] lg:flex-none lg:flex-row lg:overflow-hidden dark:bg-zinc-950">
@@ -398,7 +398,24 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
         </div>
 
         <div className="hidden items-center gap-3 border-t-2 border-zinc-200 bg-zinc-50 px-3 py-2 lg:flex dark:border-zinc-800 dark:bg-zinc-950">
-          {clearButton(false)}
+          <button
+            type="button"
+            onClick={() => setConfirm("clear")}
+            disabled={clearDisabled}
+            className={`${barButton} hover:border-red-600 hover:text-red-700`}
+          >
+            <Trash2 className="h-5 w-5" aria-hidden />
+            Clear cart
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviousOpen(true)}
+            disabled={previousDisabled}
+            className={`${barButton} hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300`}
+          >
+            <History className="h-5 w-5" aria-hidden />
+            Print Previous Invoice
+          </button>
           <p className="ml-auto text-sm font-medium tabular-nums text-zinc-600 dark:text-zinc-400">
             {totals.itemCount} {totals.itemCount === 1 ? "line" : "lines"} · {totals.totalQty} qty
           </p>
@@ -443,8 +460,35 @@ export default function BillingScreen({ userId, isAdmin, counterCode }: BillingS
             onPay={(method) => void submitSale(method)}
           />
         }
-        mobileActions={cart.items.length > 0 && !locked ? clearButton(true) : null}
+        mobileActions={
+          <MobileActionsMenu
+            actions={[
+              {
+                label: "Print Previous Invoice",
+                icon: <History className="h-5 w-5" aria-hidden />,
+                onSelect: () => setPreviousOpen(true),
+                disabled: previousDisabled,
+              },
+              {
+                label: "Clear cart",
+                icon: <Trash2 className="h-5 w-5" aria-hidden />,
+                onSelect: () => setConfirm("clear"),
+                disabled: clearDisabled,
+                destructive: true,
+              },
+            ]}
+          />
+        }
       />
+
+      {previousOpen && (
+        <PreviousInvoiceDialog
+          onClose={() => setPreviousOpen(false)}
+          isAdmin={isAdmin}
+          counterCode={counterCode}
+          printWidthMm={printWidthMm}
+        />
+      )}
 
       {cameraOpen && (
         <CameraScanner
