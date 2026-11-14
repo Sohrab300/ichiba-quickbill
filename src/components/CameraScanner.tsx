@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Camera, X, RefreshCw, AlertCircle, Check } from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -26,6 +26,28 @@ export function CameraScanner({
   const containerId = "ichiba-camera-reader";
   const lastScanTimeRef = useRef<number>(0);
 
+  // Effect events always see the latest props, so a re-render of the parent (every scan
+  // changes the cart) or toggling "continuous" never restarts the camera.
+  const handleDecoded = useEffectEvent((decodedText: string, scanner: Html5Qrcode) => {
+    const now = Date.now();
+    // Debounce: the same frame decodes many times a second.
+    if (now - lastScanTimeRef.current < 1200) return;
+    lastScanTimeRef.current = now;
+    setLastScanned(decodedText);
+    onScan(decodedText);
+
+    if (!continuous) {
+      // Single-scan mode: close after the first code.
+      scanner
+        .stop()
+        .catch(() => {})
+        .finally(() => {
+          scannerRef.current = null;
+          onClose();
+        });
+    }
+  });
+
   useEffect(() => {
     let isMounted = true;
 
@@ -47,36 +69,19 @@ export function CameraScanner({
         await html5QrCode.start(
           { facingMode: "environment" },
           config,
-          (decodedText) => {
-            const now = Date.now();
-            // Debounce scan calls to avoid rapid duplicate triggers (1.2 seconds for same barcode)
-            if (now - lastScanTimeRef.current < 1200) {
-              return;
-            }
-            lastScanTimeRef.current = now;
-            setLastScanned(decodedText);
-
-            onScan(decodedText);
-
-            if (!continuous) {
-              // Close immediately in single scan mode
-              html5QrCode
-                .stop()
-                .catch(() => {})
-                .finally(() => {
-                  scannerRef.current = null;
-                  onClose();
-                });
-            }
-          },
+          (decodedText) => handleDecoded(decodedText, html5QrCode),
           () => {
             // Frame parse error ignored - standard during live scanning
           }
         );
 
-        if (isMounted) {
-          setIsInitializing(false);
+        if (!isMounted) {
+          // Closed (or StrictMode re-mount) while the camera was starting: the cleanup's stop()
+          // ran before start() finished, so stop it now or the camera stays on.
+          html5QrCode.stop().catch(() => {});
+          return;
         }
+        setIsInitializing(false);
       } catch (err: unknown) {
         console.error("Camera scanner error:", err);
         if (isMounted) {
@@ -103,7 +108,7 @@ export function CameraScanner({
           });
       }
     };
-  }, [continuous, onClose, onScan]);
+  }, []);
 
   if (!isOpen) return null;
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, Package, Store, LogOut } from "lucide-react";
@@ -22,8 +23,8 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+    <header className="sticky top-0 z-40 h-16 w-full border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className="mx-auto flex h-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex shrink-0 items-center gap-3">
           <Link href="/" className="flex items-center gap-2 group">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold shadow-sm transition-transform group-hover:scale-105">
@@ -70,6 +71,8 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
               })}
             </nav>
 
+            <Clock />
+
             {staff && (
               <div className="flex min-w-0 items-center gap-2 border-l border-zinc-200 pl-2 sm:pl-4 dark:border-zinc-800">
                 <div className="min-w-0 text-right leading-tight">
@@ -102,3 +105,34 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
   );
 }
 export default Navbar;
+
+const clockFormat = new Intl.DateTimeFormat("en-IN", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Kolkata",
+});
+
+function subscribeToMinutes(onChange: () => void): () => void {
+  const timer = setInterval(onChange, 10_000);
+  return () => clearInterval(timer);
+}
+
+/** Current minute as a stable number (so the snapshot only changes once a minute). */
+const currentMinute = () => Math.floor(Date.now() / 60_000);
+
+/** Date and time (IST). Rendered only in the browser: the server snapshot is null. */
+function Clock() {
+  const minute = useSyncExternalStore(subscribeToMinutes, currentMinute, () => null);
+  if (minute === null) return null;
+  return (
+    <time
+      dateTime={new Date(minute * 60_000).toISOString()}
+      className="hidden whitespace-nowrap text-sm font-medium tabular-nums text-zinc-600 lg:block dark:text-zinc-400"
+    >
+      {clockFormat.format(minute * 60_000)}
+    </time>
+  );
+}

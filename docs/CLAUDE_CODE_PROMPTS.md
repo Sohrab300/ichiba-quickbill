@@ -218,7 +218,14 @@ Read AGENTS.md and docs/REQUIREMENTS.md section 7.
    dialog is cancelled or fails, nothing changes server-side — the Completed panel's Reprint button prints
    again. Reprint always fetches via getInvoiceForReprint(id) from Supabase and adds a small "REPRINT"
    marker.
-5. Do not attempt silent printing or ESC/POS. Write docs/PRINTER_SETUP.md for the store: how to set the
+5. Build the "Print Previous Invoice" button and dialog from REQUIREMENTS.md section 12 (it was
+   deferred from prompt 4). Add a server action getRecentInvoices({ search?: string }) that returns,
+   for the caller's own counter, the most recent invoices of today (newest first, max 20), or
+   invoices matching an invoice-number search (admins: any counter, any date). The dialog opens with
+   the counter's last invoice selected and a Reprint button; Enter reprints. Wire it into the left
+   bottom bar on desktop and the menu on mobile. Reprint uses getInvoiceForReprint and never creates
+   an invoice.
+6. Do not attempt silent printing or ESC/POS. Write docs/PRINTER_SETUP.md for the store: how to set the
    thermal printer as Windows default, set paper size 58/80mm and "cut after each page" in the driver if
    supported, disable headers/footers and margins in Chrome/Edge print settings, and optional Chrome
    kiosk-printing flag (--kiosk-printing) with its trade-offs.

@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import BillingScreen from "@/components/BillingScreen";
+import BillingScreen from "@/components/billing/BillingScreen";
 import PageLoading from "@/components/PageLoading";
 import { requireStaffForPage } from "@/lib/auth";
 
@@ -13,5 +13,11 @@ export default function BillingPage() {
 
 async function Billing() {
   const staff = await requireStaffForPage();
-  return <BillingScreen canAddProducts={staff.role === "admin"} />;
+  return (
+    <BillingScreen
+      userId={staff.userId}
+      isAdmin={staff.role === "admin"}
+      counterCode={staff.counter?.code ?? null}
+    />
+  );
 }
