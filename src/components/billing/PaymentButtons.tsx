@@ -3,6 +3,8 @@
 import { Banknote, Check, CheckCircle2, CreditCard, Loader2, QrCode, WifiOff, type LucideIcon } from "lucide-react";
 import { paymentLabel, type PaymentMethod } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
+import { Kbd } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 
 export interface PaymentOption {
   method: PaymentMethod;
@@ -10,23 +12,16 @@ export interface PaymentOption {
   /** KeyboardEvent.key that completes the sale with this method. */
   shortcut: "F7" | "F8" | "F9";
   icon: LucideIcon;
-  className: string;
 }
 
 // REQUIREMENTS.md section 12: each payment button is "Complete & Print with this method".
 export const PAYMENT_OPTIONS: readonly PaymentOption[] = [
-  { method: "cash", label: "Cash", shortcut: "F7", icon: Banknote, className: "bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900" },
-  { method: "upi", label: "UPI", shortcut: "F8", icon: QrCode, className: "bg-indigo-700 hover:bg-indigo-800 active:bg-indigo-900" },
-  { method: "card", label: "Card", shortcut: "F9", icon: CreditCard, className: "bg-sky-800 hover:bg-sky-900 active:bg-sky-950" },
+  { method: "cash", label: "Cash", shortcut: "F7", icon: Banknote },
+  { method: "upi", label: "UPI", shortcut: "F8", icon: QrCode },
+  { method: "card", label: "Card", shortcut: "F9", icon: CreditCard },
 ];
 
 export { paymentLabel };
-
-const MOBILE_SELECTED: Record<PaymentMethod, string> = {
-  cash: "border-emerald-700 bg-emerald-700 text-white",
-  upi: "border-indigo-700 bg-indigo-700 text-white",
-  card: "border-sky-800 bg-sky-800 text-white",
-};
 
 interface PaymentButtonsProps {
   disabled: boolean;
@@ -38,28 +33,29 @@ interface PaymentButtonsProps {
 export function PaymentButtons({ disabled, busyMethod, onPay }: PaymentButtonsProps) {
   return (
     <div>
-      <p className="mb-2 hidden text-xs font-bold uppercase tracking-wide text-zinc-600 lg:block dark:text-zinc-400">
+      <p className="mb-2 hidden text-xs font-bold tracking-wide text-ink-muted uppercase lg:block">
         Complete &amp; print with
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        {PAYMENT_OPTIONS.map(({ method, label, shortcut, icon: Icon, className }) => {
+      <div className="grid grid-cols-3 gap-3">
+        {PAYMENT_OPTIONS.map(({ method, label, shortcut, icon: Icon }) => {
           const busy = busyMethod === method;
           return (
-            <button
+            <Button
               key={method}
-              type="button"
+              variant="primary"
+              size="xl"
               disabled={disabled}
               onClick={() => onPay(method)}
               aria-keyshortcuts={shortcut}
               aria-label={`Complete and print, paid by ${label} (${shortcut})`}
-              className={`relative flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 disabled:shadow-none lg:h-20 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500 ${className}`}
+              className="relative flex-col gap-1 px-2 lg:h-20"
             >
-              <span className="flex items-center gap-2 text-lg font-bold lg:text-xl">
-                {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Icon className="h-5 w-5" aria-hidden />}
+              <span className="flex items-center gap-2 font-display text-2xl leading-none">
+                {busy ? <Loader2 className="h-6 w-6 animate-spin" aria-hidden /> : <Icon className="h-6 w-6" aria-hidden />}
                 {label}
               </span>
-              <kbd className="rounded bg-black/20 px-1.5 font-mono text-[11px] font-semibold">{shortcut}</kbd>
-            </button>
+              <Kbd>{shortcut}</Kbd>
+            </Button>
           );
         })}
       </div>
@@ -107,30 +103,29 @@ export function MobilePayment({ selected, onSelect, onComplete, disabled, empty,
         {PAYMENT_OPTIONS.map(({ method, label: methodLabel, icon: Icon }) => {
           const on = selected === method;
           return (
-            <button
+            <Button
               key={method}
-              type="button"
               role="radio"
               aria-checked={on}
+              variant={on ? "ink" : "secondary"}
+              size="lg"
               disabled={disabled}
               onClick={() => onSelect(method)}
-              className={`flex h-14 items-center justify-center gap-2 rounded-xl border-2 text-lg font-bold transition-colors disabled:opacity-50 ${
-                on
-                  ? MOBILE_SELECTED[method]
-                  : "border-zinc-300 bg-white text-zinc-900 active:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-              }`}
+              className="px-2"
             >
               {on ? <Check className="h-5 w-5" aria-hidden /> : <Icon className="h-5 w-5" aria-hidden />}
               {methodLabel}
-            </button>
+            </Button>
           );
         })}
       </div>
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="xl"
+        block
         onClick={onComplete}
         disabled={disabled || empty || busy || offline || selected === null}
-        className="flex h-16 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 text-lg font-extrabold text-white shadow-sm active:bg-emerald-900 disabled:bg-zinc-300 disabled:text-zinc-600 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-400"
+        className="px-3 font-display"
       >
         {busy ? (
           <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
@@ -140,7 +135,7 @@ export function MobilePayment({ selected, onSelect, onComplete, disabled, empty,
           <CheckCircle2 className="h-6 w-6" aria-hidden />
         )}
         <span className="truncate tabular-nums">{label}</span>
-      </button>
+      </Button>
     </div>
   );
 }

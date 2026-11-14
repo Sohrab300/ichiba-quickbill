@@ -8,7 +8,6 @@ import {
   Edit2,
   Trash2,
   Loader2,
-  AlertCircle,
   Tag,
 } from "lucide-react";
 import { getProducts, deleteProduct, type ProductList } from "@/lib/actions";
@@ -16,6 +15,14 @@ import { formatINR } from "@/lib/format";
 import type { Product } from "@/lib/supabase/mappers";
 import AddProductModal from "@/components/AddProductModal";
 import EditProductModal from "@/components/EditProductModal";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { cardClasses } from "@/components/ui/Card";
+import { Input } from "@/components/ui/Field";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { tableStyles as tbl } from "@/components/ui/Table";
+import { cx } from "@/components/ui/cx";
 
 export default function ProductCatalog({
   canManage,
@@ -122,87 +129,78 @@ export default function ProductCatalog({
   return (
     <div className="max-w-6xl w-full mx-auto p-4 sm:p-6 space-y-6">
       {/* Top Banner & Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2.5">
-            <Package className="h-7 w-7 text-emerald-600" />
-            Product Catalog
-          </h1>
-          <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            Item codes, barcodes, selling price, MRP and GST. Prices include GST.
-          </p>
-        </div>
-
-        {canManage && (
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="h-11 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm self-start sm:self-auto"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add New Product</span>
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Product Catalog"
+        icon={<Package />}
+        description="Item codes, barcodes, selling price, MRP and GST. Prices include GST."
+        actions={
+          canManage && (
+            <Button variant="primary" onClick={() => setIsAddOpen(true)}>
+              <Plus className="h-5 w-5" />
+              <span>Add New Product</span>
+            </Button>
+          )
+        }
+      />
 
       {/* Search Bar */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-          <input
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-ink-muted" />
+          <Input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by name, item code, barcode or category..."
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            withIcon
           />
         </div>
-        <button
-          type="submit"
-          className="h-11 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-medium text-xs sm:text-sm transition-colors"
-        >
+        <Button type="submit" variant="ink" size="sm" className="px-4">
           Search
-        </button>
+        </Button>
         {searchQuery && (
-          <button
-            type="button"
-            onClick={handleClearSearch}
-            className="h-11 px-3 rounded-xl border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs sm:text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          >
+          <Button variant="ghost" size="sm" onClick={handleClearSearch}>
             Clear
-          </button>
+          </Button>
         )}
       </form>
 
       {/* Error Message */}
       {error && (
-        <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-xs sm:text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <Alert tone="danger" size="sm">
+          {error}
+        </Alert>
       )}
 
       {!isLoading && products.length > 0 && (
-        <p className="text-xs text-zinc-500 -mt-3">
-          {products.length < total
-            ? `Showing ${products.length.toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")} products. Search to narrow down.`
-            : `${total.toLocaleString("en-IN")} ${total === 1 ? "product" : "products"}`}
+        <p className="-mt-3 text-sm text-ink-muted">
+          {products.length < total ? (
+            <>
+              Showing <span className="num">{products.length.toLocaleString("en-IN")}</span> of{" "}
+              <span className="num">{total.toLocaleString("en-IN")}</span> products. Search to narrow down.
+            </>
+          ) : (
+            <>
+              <span className="num">{total.toLocaleString("en-IN")}</span> {total === 1 ? "product" : "products"}
+            </>
+          )}
         </p>
       )}
 
       {/* Products Table */}
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
+      <div className={cardClasses({ className: "overflow-hidden" })}>
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3 text-zinc-500">
-            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
-            <span className="text-xs">Loading products...</span>
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-ink-muted">
+            <Loader2 className="h-8 w-8 animate-spin text-brand" />
+            <span className="text-sm">Loading products...</span>
           </div>
         ) : products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <Package className="h-12 w-12 text-zinc-300 dark:text-zinc-700 mb-3" />
-            <h3 className="font-bold text-base text-zinc-800 dark:text-zinc-200">
+          <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
+            <Package className="mb-3 h-12 w-12 text-ink-muted" />
+            <h3 className="font-display text-xl font-bold text-ink">
               No products found
             </h3>
-            <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+            <p className="mt-1 max-w-sm text-sm text-ink-muted">
               {searchQuery
                 ? `No products matched "${searchQuery}". Try a different keyword.`
                 : canManage
@@ -212,9 +210,9 @@ export default function ProductCatalog({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+            <table className={cx(tbl.table, "border-collapse text-left")}>
+              <thead className={tbl.thead}>
+                <tr>
                   <th className="py-3 px-4 sm:px-6">Item code</th>
                   <th className="py-3 px-4">Product</th>
                   <th className="py-3 px-4 text-right">Selling</th>
@@ -224,32 +222,34 @@ export default function ProductCatalog({
                   {canManage && <th className="py-3 px-4 sm:px-6 text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-sm">
+              <tbody className={tbl.tbody}>
                 {products.map((product) => (
                   <tr
                     key={product.id}
-                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${product.isActive ? "" : "opacity-60"}`}
+                    className={cx(tbl.tr, "transition-colors hover:bg-brand-soft", !product.isActive && "opacity-60")}
                   >
-                    <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-zinc-600 dark:text-zinc-400 align-top">
+                    <td className="px-4 py-3.5 align-top font-mono text-sm text-ink-muted sm:px-6">
                       {product.itemCode}
                     </td>
                     <td className="py-3.5 px-4 align-top">
-                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
+                      <div className="flex flex-wrap items-center gap-2 font-bold text-ink">
                         {product.name}
                         {!product.isActive && (
-                          <span className="rounded-md bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-600 dark:text-zinc-300">
-                            Inactive
-                          </span>
+                          <Badge>Inactive</Badge>
                         )}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
                         {product.category && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-zinc-700 dark:text-zinc-300">
-                            <Tag className="h-3 w-3 text-zinc-400" />
+                          <span className="inline-flex items-center gap-1 rounded-full border-hairline border-ink/40 bg-paper px-2 py-px text-ink">
+                            <Tag className="h-3.5 w-3.5 text-ink-muted" />
                             {product.category}
                           </span>
                         )}
-                        {product.hsnCode && <span>HSN {product.hsnCode}</span>}
+                        {product.hsnCode && (
+                          <span>
+                            HSN <span className="font-mono">{product.hsnCode}</span>
+                          </span>
+                        )}
                         {product.barcodes.map((b) => (
                           <span key={b.id} className="font-mono" title="Linked barcode">
                             {b.barcode}
@@ -257,38 +257,42 @@ export default function ProductCatalog({
                         ))}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums align-top whitespace-nowrap">
+                    <td className="num px-4 py-3.5 text-right align-top font-extrabold whitespace-nowrap text-ink">
                       {formatINR(product.sellingPrice)}
                     </td>
-                    <td className="py-3.5 px-4 text-right text-zinc-600 dark:text-zinc-400 tabular-nums align-top whitespace-nowrap">
+                    <td className="num px-4 py-3.5 text-right align-top whitespace-nowrap text-ink-muted">
                       {product.mrp === null ? "-" : formatINR(product.mrp)}
                     </td>
-                    <td className="py-3.5 px-4 text-right text-zinc-700 dark:text-zinc-300 tabular-nums align-top">
+                    <td className="num px-4 py-3.5 text-right align-top text-ink">
                       {product.gstRate}%
                     </td>
-                    <td className="py-3.5 px-4 text-right text-xs text-zinc-500 tabular-nums align-top whitespace-nowrap">
+                    <td className="num px-4 py-3.5 text-right align-top text-sm whitespace-nowrap text-ink-muted">
                       {product.stockQty.toLocaleString("en-IN")} {product.uom}
                     </td>
                     {canManage && (
-                      <td className="py-3.5 px-4 sm:px-6 text-right align-top">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
+                      <td className="px-4 py-2 text-right align-top sm:px-6">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            square
                             onClick={() => setEditingProduct(product)}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
                             title="Edit product"
                             aria-label={`Edit ${product.name}`}
                           >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
+                            <Edit2 className="h-5 w-5" />
+                          </Button>
+                          <Button
+                            variant="ghost-danger"
+                            size="sm"
+                            square
                             onClick={() => handleDelete(product)}
                             disabled={deletingId === product.id}
-                            className="p-1.5 rounded-lg text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
                             title="Delete product"
                             aria-label={`Delete ${product.name}`}
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                            <Trash2 className="h-5 w-5" />
+                          </Button>
                         </div>
                       </td>
                     )}

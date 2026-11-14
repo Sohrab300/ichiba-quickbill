@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, History, Loader2, Trash2 } from "lucide-react";
+import { History, Loader2, Trash2 } from "lucide-react";
 import { lookupProduct } from "@/lib/actions";
 import { completeSale, getInvoiceForReprint, type CompleteSaleResult } from "@/lib/invoice-actions";
 import { addBlockedReason, cartReducer, newIdempotencyKey, saveCart, toSaleItems, type CartProduct } from "@/lib/cart";
@@ -17,6 +17,8 @@ import type { PaymentMethod } from "@/lib/constants";
 import type { Product } from "@/lib/supabase/mappers";
 import CameraScanner from "@/components/CameraScanner";
 import AddProductModal from "@/components/AddProductModal";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useCart } from "./useCart";
 import { ScanBar, type ScanStatus } from "./ScanBar";
 import { CartTable } from "./CartTable";
@@ -399,14 +401,11 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
   const clearDisabled = locked || cart.items.length === 0;
   // Not while a sale is being saved or its outcome is unknown: that sale must be settled first.
   const previousDisabled = !hydrated || locked;
-  const barButton =
-    "flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-4 font-semibold text-zinc-800 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
-
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 lg:h-[calc(100dvh-4rem-var(--connection-banner-h,0rem))] lg:flex-none lg:flex-row lg:overflow-hidden dark:bg-zinc-950">
+    <div className="flex flex-1 flex-col bg-paper lg:h-[calc(100dvh-4rem-var(--connection-banner-h,0rem))] lg:flex-none lg:flex-row lg:overflow-hidden">
       {/* Left: scan + items */}
       <section aria-label="Items" className="flex flex-1 flex-col lg:min-h-0 lg:min-w-0">
-        <div className="sticky top-16 z-20 border-b-2 border-zinc-200 bg-zinc-50 px-3 pt-3 lg:static dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="sticky top-16 z-20 border-b border-ink bg-paper px-3 pt-3 lg:static">
           <ScanBar
             inputRef={scanInputRef}
             onScan={enqueueScan}
@@ -426,37 +425,27 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           />
         </div>
 
-        <div className="flex flex-1 flex-col bg-white lg:min-h-0 dark:bg-zinc-950">
+        <div className="flex flex-1 flex-col bg-paper lg:min-h-0 lg:bg-surface">
           {hydrated ? (
             <CartTable items={cart.items} highlight={highlight} locked={locked} dispatch={dispatch} onDone={focusScan} />
           ) : (
             <div className="flex flex-1 items-center justify-center py-16" role="status">
-              <Loader2 className="h-8 w-8 animate-spin text-zinc-500" aria-hidden />
+              <Loader2 className="h-8 w-8 animate-spin text-brand" aria-hidden />
               <span className="sr-only">Loading cart…</span>
             </div>
           )}
         </div>
 
-        <div className="hidden items-center gap-3 border-t-2 border-zinc-200 bg-zinc-50 px-3 py-2 lg:flex dark:border-zinc-800 dark:bg-zinc-950">
-          <button
-            type="button"
-            onClick={() => setConfirm("clear")}
-            disabled={clearDisabled}
-            className={`${barButton} hover:border-red-600 hover:text-red-700`}
-          >
+        <div className="hidden items-center gap-3 border-t border-ink bg-paper px-3 py-2 lg:flex">
+          <Button variant="danger" onClick={() => setConfirm("clear")} disabled={clearDisabled}>
             <Trash2 className="h-5 w-5" aria-hidden />
             Clear cart
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreviousOpen(true)}
-            disabled={previousDisabled}
-            className={`${barButton} hover:border-emerald-700 hover:text-emerald-800 dark:hover:text-emerald-300`}
-          >
+          </Button>
+          <Button variant="secondary" onClick={() => setPreviousOpen(true)} disabled={previousDisabled}>
             <History className="h-5 w-5" aria-hidden />
             Print Previous Invoice
-          </button>
-          <p className="ml-auto text-sm font-medium tabular-nums text-zinc-600 dark:text-zinc-400">
+          </Button>
+          <p className="num ml-auto text-sm font-semibold text-ink-muted">
             {totals.itemCount} {totals.itemCount === 1 ? "line" : "lines"} · {totals.totalQty} qty
           </p>
         </div>
@@ -467,10 +456,9 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
         totals={totals}
         notice={
           !canBill && (
-            <p className="flex items-start gap-2 rounded-xl border-2 border-amber-500 bg-amber-50 p-3 text-sm font-medium text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <Alert tone="warning" size="sm">
               This login has no counter, so it can&apos;t complete sales. Scanning still works for price checks.
-            </p>
+            </Alert>
           )
         }
         status={
@@ -593,7 +581,8 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           setScanStatus({ tone: "info", text: "Cart cleared." });
         }}
       >
-        All {totals.itemCount} {totals.itemCount === 1 ? "line" : "lines"} ({formatINR(totals.grandTotal)}) will be removed.
+        All <span className="num">{totals.itemCount}</span> {totals.itemCount === 1 ? "line" : "lines"} (
+        <span className="num">{formatINR(totals.grandTotal)}</span>) will be removed.
       </ConfirmDialog>
 
       <ConfirmDialog

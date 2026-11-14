@@ -3,6 +3,11 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import PageLoading from "@/components/PageLoading";
 import { ReprintButton } from "@/components/invoices/ReprintButton";
+import { Alert } from "@/components/ui/Alert";
+import { buttonClasses } from "@/components/ui/Button";
+import { cardClasses } from "@/components/ui/Card";
+import { tableStyles as tbl } from "@/components/ui/Table";
+import { cx } from "@/components/ui/cx";
 import { requireStaffForPage } from "@/lib/auth";
 import { paymentLabel } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
@@ -67,21 +72,21 @@ async function InvoiceDetail({ params, searchParams }: { params: Params; searchP
     <div className="mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6">
       <Link
         href={back}
-        className="inline-flex h-11 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className={buttonClasses({ variant: "ghost", size: "sm", link: true, className: "-ml-1 px-2" })}
       >
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Back to invoices
       </Link>
 
       {error ? (
-        <p role="alert" className="rounded-xl border-2 border-red-300 bg-red-50 p-4 font-medium text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {error}
-        </p>
+        <Alert tone="danger" role="alert">
+          <p className="text-base font-semibold">{error}</p>
+        </Alert>
       ) : !invoice ? (
-        <div className="rounded-xl border border-dashed border-zinc-300 bg-white p-10 text-center dark:border-zinc-700 dark:bg-zinc-900">
-          <p className="text-lg font-semibold">Invoice not found</p>
+        <div className="rounded-card border border-dashed border-ink/50 bg-surface p-10 text-center">
+          <p className="font-display text-2xl font-bold">Invoice not found</p>
           {staff.role !== "admin" && (
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Cashiers can open today&apos;s invoices of their own counter.</p>
+            <p className="mt-1 text-sm text-ink-muted">Cashiers can open today&apos;s invoices of their own counter.</p>
           )}
         </div>
       ) : (
@@ -93,7 +98,7 @@ async function InvoiceDetail({ params, searchParams }: { params: Params; searchP
 
 function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm: 58 | 80 | null }) {
   const facts = [
-    { label: "Date & time (IST)", value: dateTimeFormat.format(new Date(invoice.createdAt)) },
+    { label: "Date & time (IST)", value: dateTimeFormat.format(new Date(invoice.createdAt)), num: true },
     { label: "Counter", value: invoice.counterCode },
     { label: "Cashier", value: invoice.cashierName },
     { label: "Payment", value: paymentLabel(invoice.paymentMethod) },
@@ -101,34 +106,34 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
 
   return (
     <>
-      <section className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800 dark:bg-zinc-900">
+      <section className={cardClasses({ strong: true, className: "flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between" })}>
         <div className="min-w-0 space-y-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Tax invoice</p>
-            <h1 className="break-all font-mono text-2xl font-extrabold">{invoice.invoiceNo}</h1>
+            <p className="text-xs font-bold tracking-wide text-brand uppercase">Tax invoice</p>
+            <h1 className="font-mono text-2xl font-extrabold break-all tabular-nums sm:text-3xl">{invoice.invoiceNo}</h1>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4">
             {facts.map((f) => (
               <div key={f.label}>
-                <dt className="text-xs text-zinc-500 dark:text-zinc-400">{f.label}</dt>
-                <dd className="font-semibold">{f.value}</dd>
+                <dt className="text-xs font-bold tracking-wide text-ink-muted uppercase">{f.label}</dt>
+                <dd className={cx("font-semibold", f.num && "num")}>{f.value}</dd>
               </div>
             ))}
           </dl>
         </div>
         <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-          <p className="text-3xl font-extrabold tabular-nums">{formatINR(invoice.grandTotal)}</p>
+          <p className="font-display text-4xl leading-none font-extrabold tabular-nums">{formatINR(invoice.grandTotal)}</p>
           <ReprintButton invoiceId={invoice.id} printWidthMm={printWidthMm} />
         </div>
       </section>
 
       <section aria-labelledby="lines-heading" className="space-y-2">
         <h2 id="lines-heading" className="text-lg font-bold">
-          Items <span className="text-sm font-normal text-zinc-500">({invoice.itemCount} lines · qty {invoice.totalQty})</span>
+          Items <span className="num text-sm font-normal text-ink-muted">({invoice.itemCount} lines · qty {invoice.totalQty})</span>
         </h2>
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <table className="w-full min-w-[860px] text-sm">
-            <thead className="bg-zinc-100 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+        <div className={tbl.wrap}>
+          <table className={cx(tbl.table, "min-w-[860px]")}>
+            <thead className={tbl.thead}>
               <tr>
                 <th className="px-3 py-2.5 text-left">#</th>
                 <th className="px-3 py-2.5 text-left">Item</th>
@@ -142,27 +147,32 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
                 <th className="px-3 py-2.5 text-right">SGST</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            <tbody className={tbl.tbody}>
               {invoice.items.map((it) => (
-                <tr key={it.lineNo}>
-                  <td className="px-3 py-2.5 tabular-nums text-zinc-500">{it.lineNo}</td>
+                <tr key={it.lineNo} className={tbl.tr}>
+                  <td className="num px-3 py-2.5 text-ink-muted">{it.lineNo}</td>
                   <td className="px-3 py-2.5">
-                    <p className="font-semibold">{it.name}</p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {it.itemCode}
-                      {it.mrp !== null && ` · MRP ${formatINR(it.mrp)}`}
+                    <p className="font-bold">{it.name}</p>
+                    <p className="text-sm text-ink-muted">
+                      <span className="font-mono">{it.itemCode}</span>
+                      {it.mrp !== null && (
+                        <>
+                          {" · MRP "}
+                          <span className="num">{formatINR(it.mrp)}</span>
+                        </>
+                      )}
                     </p>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-xs">{it.hsnCode ?? "—"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{it.gstRate}%</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {it.qty} <span className="text-xs text-zinc-500">{it.uom}</span>
+                  <td className="num px-3 py-2.5 text-right">{it.gstRate}%</td>
+                  <td className="num px-3 py-2.5 text-right">
+                    {it.qty} <span className="text-xs text-ink-muted">{it.uom}</span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(it.unitPrice)}</td>
-                  <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{formatINR(it.lineTotal)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(it.taxableValue)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(it.cgst)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(it.sgst)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(it.unitPrice)}</td>
+                  <td className="num px-3 py-2.5 text-right font-bold">{formatINR(it.lineTotal)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(it.taxableValue)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(it.cgst)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(it.sgst)}</td>
                 </tr>
               ))}
             </tbody>
@@ -173,11 +183,11 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
       <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
         <section aria-labelledby="tax-heading" className="space-y-2">
           <h2 id="tax-heading" className="text-lg font-bold">
-            Tax summary <span className="text-sm font-normal text-zinc-500">(GST included in prices)</span>
+            Tax summary <span className="text-sm font-normal text-ink-muted">(GST included in prices)</span>
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead className="bg-zinc-100 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+          <div className={tbl.wrap}>
+            <table className={cx(tbl.table, "min-w-[520px]")}>
+              <thead className={tbl.thead}>
                 <tr>
                   <th className="px-3 py-2.5 text-left">HSN</th>
                   <th className="px-3 py-2.5 text-right">GST</th>
@@ -187,32 +197,32 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
                   <th className="px-3 py-2.5 text-right">Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              <tbody className={tbl.tbody}>
                 {invoice.taxSummary.map((row) => (
-                  <tr key={`${row.hsnCode ?? ""}|${row.gstRate}`}>
+                  <tr key={`${row.hsnCode ?? ""}|${row.gstRate}`} className={tbl.tr}>
                     <td className="px-3 py-2.5 font-mono text-xs">{row.hsnCode ?? "—"}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">
+                    <td className="num px-3 py-2.5 text-right">
                       {row.gstRate}%{" "}
-                      <span className="text-xs text-zinc-500">
+                      <span className="text-xs text-ink-muted">
                         ({row.gstRate / 2}% + {row.gstRate / 2}%)
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(row.taxableValue)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(row.cgst)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(row.sgst)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(row.total)}</td>
+                    <td className="num px-3 py-2.5 text-right">{formatINR(row.taxableValue)}</td>
+                    <td className="num px-3 py-2.5 text-right">{formatINR(row.cgst)}</td>
+                    <td className="num px-3 py-2.5 text-right">{formatINR(row.sgst)}</td>
+                    <td className="num px-3 py-2.5 text-right">{formatINR(row.total)}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="border-t-2 border-zinc-300 font-bold dark:border-zinc-700">
+              <tfoot className={tbl.tfoot}>
                 <tr>
                   <td className="px-3 py-2.5" colSpan={2}>
                     Total
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(invoice.taxableTotal)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(invoice.cgstTotal)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(invoice.sgstTotal)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatINR(invoice.subtotal)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(invoice.taxableTotal)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(invoice.cgstTotal)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(invoice.sgstTotal)}</td>
+                  <td className="num px-3 py-2.5 text-right">{formatINR(invoice.subtotal)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -223,18 +233,18 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
           <h2 id="totals-heading" className="text-lg font-bold">
             Totals
           </h2>
-          <dl className="space-y-1.5 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <dl className={cardClasses({ className: "space-y-1.5 p-4 text-sm" })}>
             <TotalRow label="Sub total" value={formatINR(invoice.subtotal)} />
             <TotalRow label="Taxable value" value={formatINR(invoice.taxableTotal)} />
             <TotalRow label="CGST" value={formatINR(invoice.cgstTotal)} />
             <TotalRow label="SGST" value={formatINR(invoice.sgstTotal)} />
             <TotalRow label="Round off" value={formatINR(invoice.roundOff)} />
-            <div className="flex items-baseline justify-between border-t-2 border-zinc-300 pt-2 text-lg font-extrabold dark:border-zinc-700">
+            <div className="flex items-baseline justify-between border-t border-ink pt-2 font-display text-2xl leading-tight font-extrabold">
               <dt>Grand total</dt>
               <dd className="tabular-nums">{formatINR(invoice.grandTotal)}</dd>
             </div>
           </dl>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-ink-muted">
             Issued by {invoice.store.legalName} · GSTIN {invoice.store.gstin}
           </p>
         </section>
@@ -246,8 +256,8 @@ function InvoiceView({ invoice, printWidthMm }: { invoice: Invoice; printWidthMm
 function TotalRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-zinc-600 dark:text-zinc-400">{label}</dt>
-      <dd className="font-semibold tabular-nums">{value}</dd>
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="num font-semibold">{value}</dd>
     </div>
   );
 }

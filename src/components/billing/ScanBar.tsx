@@ -4,6 +4,9 @@ import { useId, useState, type RefObject } from "react";
 import { AlertTriangle, Barcode, Camera, CheckCircle2, Info, Loader2, Lock, X } from "lucide-react";
 import { formatINR } from "@/lib/format";
 import type { Product } from "@/lib/supabase/mappers";
+import { ALERT_TONES } from "@/components/ui/Alert";
+import { PlainNumbers } from "@/components/ui/PlainNumbers";
+import { cx } from "@/components/ui/cx";
 import { useProductSearch } from "./useProductSearch";
 
 export interface ScanStatus {
@@ -105,15 +108,16 @@ export function ScanBar({
             <span
               key={flash.seq}
               aria-hidden
-              className={`pointer-events-none absolute inset-0 z-10 rounded-xl ring-4 animate-scan-flash ${
-                flash.tone === "success" ? "ring-emerald-500" : "ring-red-600"
-              }`}
+              className={cx(
+                "pointer-events-none absolute inset-0 z-10 animate-scan-flash rounded-control ring-4",
+                flash.tone === "success" ? "ring-success" : "ring-danger"
+              )}
             />
           )}
           {lockedReason ? (
-            <Lock className="pointer-events-none absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-amber-600" aria-hidden />
+            <Lock className="pointer-events-none absolute top-1/2 left-4 h-6 w-6 -translate-y-1/2 text-ink" aria-hidden />
           ) : (
-            <Barcode className="pointer-events-none absolute left-4 top-1/2 h-6 w-6 -translate-y-1/2 text-zinc-500" aria-hidden />
+            <Barcode className="pointer-events-none absolute top-1/2 left-4 h-6 w-6 -translate-y-1/2 text-ink-muted" aria-hidden />
           )}
           <input
             ref={inputRef}
@@ -138,15 +142,15 @@ export function ScanBar({
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={lockedReason ?? "Scan barcode, or type item code / name"}
-            className={`h-14 w-full rounded-xl border-2 bg-white pl-13 pr-12 font-mono text-lg text-zinc-950 placeholder:font-sans placeholder:text-base placeholder:text-zinc-500 focus:outline-none dark:bg-zinc-900 dark:text-zinc-50 ${
-              lockedReason
-                ? "border-amber-500 placeholder:text-amber-700 dark:placeholder:text-amber-400"
-                : "border-zinc-400 focus:border-emerald-600 dark:border-zinc-600"
-            }`}
+            className={cx(
+              "h-14 w-full rounded-control border border-ink pr-12 pl-13 font-mono text-lg text-ink shadow-hard-sm",
+              "placeholder:font-sans placeholder:text-base focus:border-brand focus:ring-2 focus:ring-brand focus:outline-none",
+              lockedReason ? "bg-warning-soft placeholder:font-semibold placeholder:text-ink" : "bg-surface placeholder:text-ink-muted"
+            )}
           />
           {busy && (
             <Loader2
-              className="absolute right-4 top-1/2 h-6 w-6 -translate-y-1/2 animate-spin text-emerald-700"
+              className="absolute top-1/2 right-4 h-6 w-6 -translate-y-1/2 animate-spin text-brand"
               aria-label="Looking up"
             />
           )}
@@ -155,15 +159,15 @@ export function ScanBar({
             <ul
               id={listId}
               role="listbox"
-              className="absolute inset-x-0 top-full z-30 mt-1 max-h-[min(60dvh,24rem)] overflow-y-auto rounded-xl border-2 border-zinc-300 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+              className="absolute inset-x-0 top-full z-30 mt-1.5 max-h-[min(60dvh,24rem)] overflow-y-auto rounded-card border border-ink bg-surface shadow-hard"
             >
               {search.loading && suggestions.length === 0 && (
-                <li className="flex items-center gap-2 px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
+                <li className="flex items-center gap-2 px-4 py-3 text-sm text-ink-muted">
                   <Loader2 className="h-4 w-4 animate-spin" /> Searching…
                 </li>
               )}
               {!search.loading && suggestions.length === 0 && (
-                <li className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
+                <li className="px-4 py-3 text-sm text-ink-muted">
                   {search.error ?? `No active product matches “${term}”.`}
                 </li>
               )}
@@ -176,18 +180,26 @@ export function ScanBar({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(p)}
                   onMouseEnter={() => setHighlight({ term, index: i })}
-                  className={`flex min-h-14 cursor-pointer items-center justify-between gap-3 border-b border-zinc-100 px-4 py-2 last:border-b-0 dark:border-zinc-800 ${
-                    i === activeIndex ? "bg-emerald-50 dark:bg-emerald-950/50" : ""
-                  }`}
+                  className={cx(
+                    "flex min-h-14 cursor-pointer items-center justify-between gap-3 border-b-hairline border-ink/15 px-4 py-2 last:border-b-0",
+                    i === activeIndex && "bg-brand-soft"
+                  )}
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-zinc-950 dark:text-zinc-50">{p.name}</p>
-                    <p className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                      {p.itemCode}
-                      {p.hsnCode ? ` · HSN ${p.hsnCode}` : ""} · GST {p.gstRate}%
+                    <p className="truncate font-bold text-ink">{p.name}</p>
+                    <p className="text-sm text-ink-muted">
+                      <span className="font-mono">{p.itemCode}</span>
+                      {p.hsnCode && (
+                        <>
+                          {" · HSN "}
+                          <span className="font-mono">{p.hsnCode}</span>
+                        </>
+                      )}
+                      {" · GST "}
+                      <span className="num">{p.gstRate}%</span>
                     </p>
                   </div>
-                  <span className="shrink-0 font-semibold tabular-nums">{formatINR(p.sellingPrice)}</span>
+                  <span className="num shrink-0 font-bold">{formatINR(p.sellingPrice)}</span>
                 </li>
               ))}
             </ul>
@@ -201,7 +213,12 @@ export function ScanBar({
           aria-label="Scan with camera"
           // Phones: the camera is the main way to scan, so it comes first and stands out.
           // Desktop: keyboard-wedge scanners type into the box; the camera is a fallback.
-          className="order-first flex h-14 min-w-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-lg font-bold text-white active:bg-emerald-900 disabled:opacity-40 lg:order-none lg:bg-zinc-900 lg:px-4 lg:text-base lg:font-semibold lg:hover:bg-zinc-800 dark:lg:bg-zinc-700 dark:lg:hover:bg-zinc-600"
+          className={cx(
+            "order-first flex h-14 min-w-14 shrink-0 items-center justify-center gap-2 rounded-control px-5 text-lg font-bold disabled:cursor-not-allowed disabled:opacity-50",
+            // Phones: brand button. Desktop: white secondary button.
+            "border-strong border-ink bg-brand text-paper shadow-hard enabled:active:translate-x-[3px] enabled:active:translate-y-[3px] enabled:active:shadow-none",
+            "lg:order-none lg:border lg:bg-surface lg:px-4 lg:text-base lg:text-ink lg:shadow-hard-sm lg:enabled:hover:bg-paper-2"
+          )}
         >
           <Camera className="h-6 w-6" aria-hidden />
           <span className="lg:hidden xl:inline">
@@ -214,27 +231,26 @@ export function ScanBar({
       <div aria-live="polite" className="min-h-11">
         {status && (
           <div
-            className={`flex min-h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium ${
-              status.tone === "success"
-                ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
-                : status.tone === "error"
-                  ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200"
-                  : "border-zinc-300 bg-zinc-100 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-            }`}
+            className={cx(
+              "flex min-h-11 items-center gap-2 rounded-control border border-ink px-3 text-sm font-semibold text-ink",
+              ALERT_TONES[status.tone === "error" ? "danger" : status.tone].box
+            )}
           >
             {status.tone === "success" ? (
-              <CheckCircle2 className="h-5 w-5 shrink-0" aria-hidden />
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden />
             ) : status.tone === "error" ? (
-              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
+              <AlertTriangle className="h-5 w-5 shrink-0 text-danger" aria-hidden />
             ) : (
               <Info className="h-5 w-5 shrink-0" aria-hidden />
             )}
-            <span className="min-w-0 flex-1 truncate">{status.text}</span>
+            <span className="min-w-0 flex-1 truncate">
+              <PlainNumbers text={status.text} />
+            </span>
             {status.action && (
               <button
                 type="button"
                 onClick={status.action.onClick}
-                className="h-9 shrink-0 rounded-lg bg-zinc-900 px-3 text-sm font-semibold text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+                className="h-9 shrink-0 rounded-control border border-ink bg-ink px-3 text-sm font-bold text-paper hover:bg-brand"
               >
                 {status.action.label}
               </button>
@@ -243,7 +259,7 @@ export function ScanBar({
               type="button"
               onClick={onDismissStatus}
               aria-label="Dismiss message"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg opacity-70 hover:opacity-100"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control hover:bg-ink/10"
             >
               <X className="h-4 w-4" />
             </button>

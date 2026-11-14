@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { MoreVertical } from "lucide-react";
+import { buttonClasses } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
 
 export interface MobileAction {
   label: string;
@@ -45,7 +47,7 @@ export function MobileActionsMenu({ actions }: { actions: MobileAction[] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        className="flex h-12 w-12 items-center justify-center rounded-xl border-2 border-zinc-300 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+        className={buttonClasses({ variant: "secondary", size: "md", square: true })}
       >
         <MoreVertical className="h-5 w-5" aria-hidden />
       </button>
@@ -53,7 +55,7 @@ export function MobileActionsMenu({ actions }: { actions: MobileAction[] }) {
         <ul
           id={menuId}
           role="menu"
-          className="absolute right-0 bottom-full z-30 mb-2 w-64 overflow-hidden rounded-xl border-2 border-zinc-300 bg-white py-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+          className="absolute right-0 bottom-full z-30 mb-2 w-64 divide-y divide-ink/15 overflow-hidden rounded-card border border-ink bg-surface shadow-hard"
         >
           {actions.map((a) => (
             <li key={a.label} role="none">
@@ -65,11 +67,10 @@ export function MobileActionsMenu({ actions }: { actions: MobileAction[] }) {
                   setOpen(false);
                   a.onSelect();
                 }}
-                className={`flex h-12 w-full items-center gap-3 px-4 text-left text-base font-semibold disabled:opacity-40 ${
-                  a.destructive
-                    ? "text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
-                    : "text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                }`}
+                className={cx(
+                  "flex h-12 w-full items-center gap-3 px-4 text-left text-base font-bold disabled:cursor-not-allowed disabled:text-ink-muted disabled:opacity-60",
+                  a.destructive ? "text-danger enabled:hover:bg-danger-soft" : "text-ink enabled:hover:bg-paper-2"
+                )}
               >
                 {a.icon}
                 {a.label}

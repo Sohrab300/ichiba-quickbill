@@ -1,20 +1,40 @@
 import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Atkinson_Hyperlegible_Mono, Atkinson_Hyperlegible_Next, Baloo_2 } from "next/font/google";
 import Navbar, { NavbarSkeleton } from "@/components/Navbar";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { tryGetStaffContext } from "@/lib/auth";
 import "./globals.css";
 import "./print.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+/*
+ * Type (REQUIREMENTS.md section 15):
+ * - Baloo 2: bold, rounded display face (titles, grand total, payment buttons, dialog titles).
+ *   Chosen over Fredoka/Righteous because it has tabular figures (tnum) and the ₹ sign, so the
+ *   grand total doesn't jitter while it changes.
+ * - Atkinson Hyperlegible Next: body text, designed for legibility (0/O, 1/l/I differ), tnum.
+ * - Atkinson Hyperlegible Mono: item codes, barcodes and invoice numbers.
+ * latin-ext carries the ₹ glyph.
+ */
+const display = Baloo_2({
+  variable: "--font-baloo",
+  subsets: ["latin", "latin-ext"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+// next/font has no metric overrides for the two Atkinson families yet, so they fall back to
+// plain system fonts while loading instead of a size-adjusted fallback.
+const body = Atkinson_Hyperlegible_Next({
+  variable: "--font-atkinson",
+  subsets: ["latin", "latin-ext"],
+  adjustFontFallback: false,
+  fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
+});
+
+const mono = Atkinson_Hyperlegible_Mono({
+  variable: "--font-atkinson-mono",
+  subsets: ["latin", "latin-ext"],
+  adjustFontFallback: false,
+  fallback: ["ui-monospace", "Menlo", "monospace"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +53,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Lets the sticky checkout bar sit above the iPhone home indicator (safe-area padding).
   viewportFit: "cover",
-  themeColor: "#059669",
+  themeColor: "#F7EDDF",
 };
 
 export default function RootLayout({
@@ -44,9 +64,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${display.variable} ${body.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <body className="flex min-h-full flex-col bg-paper font-sans text-ink">
         <Suspense fallback={<NavbarSkeleton />}>
           <SessionNavbar />
         </Suspense>

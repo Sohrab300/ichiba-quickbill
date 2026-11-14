@@ -3,6 +3,7 @@
 import { parseRupeesToPaise, paiseToRupeesInput } from "@/lib/format";
 import { GST_RATES, type GstRate } from "@/lib/constants";
 import type { Product } from "@/lib/supabase/mappers";
+import { fieldClasses, labelClasses } from "@/components/ui/Field";
 
 export interface ProductFormState {
   itemCode: string;
@@ -105,26 +106,19 @@ export function formToValues(
   };
 }
 
-const ACCENT = {
-  emerald: "focus:border-emerald-500 focus:ring-emerald-500/20",
-  blue: "focus:border-blue-500 focus:ring-blue-500/20",
-} as const;
-
 interface ProductFormFieldsProps {
   value: ProductFormState;
   onChange: (patch: Partial<ProductFormState>) => void;
-  accent?: keyof typeof ACCENT;
   showActive?: boolean;
 }
 
 export function ProductFormFields({
   value,
   onChange,
-  accent = "emerald",
   showActive = false,
 }: ProductFormFieldsProps) {
-  const input = `w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm focus:outline-none focus:ring-2 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 ${ACCENT[accent]}`;
-  const label = "block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1";
+  const input = fieldClasses();
+  const label = `mb-1 block ${labelClasses}`;
 
   return (
     <>
@@ -167,7 +161,7 @@ export function ProductFormFields({
             onChange={(e) => onChange({ sellingRupees: e.target.value })}
             placeholder="0.00"
             required
-            className={`${input} tabular-nums`}
+            className={`${input} num`}
           />
         </div>
         <div>
@@ -179,7 +173,7 @@ export function ProductFormFields({
             value={value.mrpRupees}
             onChange={(e) => onChange({ mrpRupees: e.target.value })}
             placeholder="0.00"
-            className={`${input} tabular-nums`}
+            className={`${input} num`}
           />
         </div>
         <div>
@@ -188,7 +182,7 @@ export function ProductFormFields({
             id="pf-gst"
             value={value.gstRate}
             onChange={(e) => onChange({ gstRate: e.target.value })}
-            className={input}
+            className={`${input} num`}
           >
             {GST_RATES.map((r) => (
               <option key={r} value={String(r)}>
@@ -249,12 +243,12 @@ export function ProductFormFields({
       </div>
 
       {showActive && (
-        <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+        <label className="flex min-h-11 items-center gap-2 text-base font-semibold text-ink">
           <input
             type="checkbox"
             checked={value.isActive}
             onChange={(e) => onChange({ isActive: e.target.checked })}
-            className="h-4 w-4 rounded border-zinc-300"
+            className="h-5 w-5 accent-brand"
           />
           Active (inactive products cannot be billed)
         </label>

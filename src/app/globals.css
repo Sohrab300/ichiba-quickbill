@@ -1,22 +1,63 @@
 @import "tailwindcss";
 
-/* Body colours come from the classes on <body> in app/layout.tsx. */
-@theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 /*
- * The offline banner (components/ConnectionBanner.tsx) sits between the navbar and the page.
- * The desktop billing screen subtracts its height so the payment buttons stay on screen.
+ * Sekai Ichiba brand theme (REQUIREMENTS.md section 15). Light only.
+ *
+ * Components use ONLY the semantic tokens below. The default Tailwind palette and its blurred
+ * shadows are switched off (`--color-*: initial`, `--shadow-*: initial`), so a stray class from
+ * the default palette (or shadow-xl) generates nothing instead of bringing the old look back.
+ *
+ * WCAG AA contrast of the text/background pairs in use (4.5:1 needed for body text):
+ *   ink on paper 14.95 · paper-2 13.34 · surface 17.31 · success-soft 13.93 · warning-soft 14.29
+ *     · danger-soft 13.49 · warning 7.53
+ *   ink-muted on paper 6.48 · paper-2 5.79 · surface 7.51 · success-soft 6.04 · warning-soft 6.20
+ *     · brand-soft/danger-soft 5.85
+ *   paper on brand 5.05 · surface on brand 5.84 · paper on brand-hover 6.66 · paper on ink 14.95
+ *   brand on surface 5.84 · brand on paper 5.05 (never brand text on paper-2: 4.50)
+ *   success on surface 6.53 · success on paper 5.64 · surface on success 6.53
+ *   brand-bright is for illustration accents only (4.46 on paper).
  */
-@media (min-width: 1024px) {
-  html:has(#connection-banner) {
-    --connection-banner-h: 3rem;
-  }
-}
-
 @theme {
+  --color-*: initial;
+
+  --color-paper: #f7eddf; /* page background */
+  --color-paper-2: #efe0ca; /* panels, table stripes, disabled fills */
+  --color-surface: #ffffff; /* cards, inputs, tables */
+  --color-ink: #1c1a1b; /* text, outlines, hard shadows */
+  --color-ink-muted: #5c534c; /* secondary text; ≥ 5.79:1 on every light background */
+
+  --color-brand: #be2c31; /* primary actions */
+  --color-brand-hover: #9e2328;
+  --color-brand-bright: #ca3530; /* illustration accents only */
+  --color-brand-soft: #f9ddd8; /* highlighted row / selected item tint */
+
+  --color-success: #1d6b3a; /* deep green */
+  --color-success-soft: #dcebd6;
+  --color-warning: #d9a21b; /* mustard: fills with ink text/icons only */
+  --color-warning-soft: #fbe8b8;
+  --color-danger: #be2c31; /* brand red, always with an icon and wording */
+  --color-danger-soft: #f9ddd8;
+
+  /* Radii: controls (buttons, inputs), cards/dialogs. */
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+
+  /* Borders: `border` = 2px ink outline; `border-strong` = 3px (primary buttons, dialogs, bars). */
+  --default-border-width: 2px;
+  --border-width-strong: 3px;
+  --border-width-hairline: 1px;
+
+  /* Hard offset shadows in ink (sticker look) — never blurred. */
+  --shadow-*: initial;
+  --shadow-hard-sm: 2px 2px 0 0 var(--color-ink);
+  --shadow-hard: 3px 3px 0 0 var(--color-ink);
+  --shadow-hard-lg: 5px 5px 0 0 var(--color-ink);
+  --shadow-hard-brand: 4px 4px 0 0 var(--color-brand);
+
+  /* text-sm is 15px (not 14) so secondary text on the billing screen stays ≥ 15px. */
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: calc(1.375 / 0.9375);
+
   --animate-scan-flash: scan-flash 0.9s ease-out forwards;
 
   @keyframes scan-flash {
@@ -30,17 +71,79 @@
   }
 }
 
+/* Font families come from next/font variables set on <html> in app/layout.tsx. */
+@theme inline {
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-baloo), var(--font-atkinson), ui-rounded, system-ui, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  /* Amounts, quantities, GST %, dates, times: Baloo 2's tabular figures have a plain 0. */
+  --font-num: var(--font-baloo), ui-rounded, system-ui, sans-serif;
+}
+
+/*
+ * Zeros (section 15): Atkinson Hyperlegible Next and Mono draw a slashed 0 in every figure set
+ * (no plain-zero alternate), which is right for codes — item codes, barcodes, HSN, invoice
+ * numbers (use font-mono) — but not for money. Every amount, quantity, GST %, date and time
+ * uses `num`: Baloo 2 with tabular figures and a plain 0.
+ */
+@utility num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  html {
+    /* Light only: native controls (date picker, checkboxes, scrollbars) never turn dark. */
+    color-scheme: light;
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  /* One visible focus style everywhere (inputs add their own brand ring). */
+  :focus-visible {
+    outline: 3px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-warning-soft);
+    color: var(--color-ink);
+  }
+}
+
+/*
+ * The offline banner (components/ConnectionBanner.tsx) sits between the navbar and the page.
+ * The desktop billing screen subtracts its height so the payment buttons stay on screen.
+ */
+@media (min-width: 1024px) {
+  html:has(#connection-banner) {
+    --connection-banner-h: 3rem;
+  }
+}
+
 /*
  * Dropdowns: replace the browser's native arrow (which Chrome draws against the right edge)
- * with our own chevron, inset from the edge. Unlayered on purpose so it wins over Tailwind's
- * px-* utilities for padding-right. Colour is mid-grey so it works in light and dark mode.
+ * with our own chevron in ink, inset from the edge. Unlayered on purpose so it wins over
+ * Tailwind's px-* utilities for padding-right.
  */
 select:not([multiple]):not([size]) {
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231c1a1b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.875rem center;
   background-size: 1.125rem 1.125rem;
   padding-right: 2.75rem;
+}
+
+/*
+ * The theme is screen-only (section 15): anything printed from the app is black on white.
+ * Receipts have their own rules in print.css.
+ */
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
 }

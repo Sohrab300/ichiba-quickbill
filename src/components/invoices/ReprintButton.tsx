@@ -5,6 +5,8 @@ import { Loader2, Printer } from "lucide-react";
 import { getInvoiceForReprint } from "@/lib/invoice-actions";
 import { resolvePrintWidth, type PrintWidth } from "@/lib/print-settings";
 import { printInvoice } from "@/components/print/print";
+import { InlineAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 
 /**
  * Reprint from history: re-fetches the invoice from Supabase and prints the normal receipt
@@ -38,19 +40,14 @@ export function ReprintButton({ invoiceId, printWidthMm }: { invoiceId: string; 
 
   return (
     <div className="flex flex-col items-stretch gap-2 sm:items-end">
-      <button
-        type="button"
-        onClick={() => void reprint()}
-        disabled={busy}
-        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-6 text-base font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
-      >
+      <Button variant="primary" onClick={() => void reprint()} disabled={busy} className="px-6">
         {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Printer className="h-5 w-5" aria-hidden />}
         Reprint
-      </button>
+      </Button>
       {error && (
-        <p role="alert" className="text-sm font-medium text-red-800 dark:text-red-300">
+        <InlineAlert tone="danger" role="alert">
           {error}
-        </p>
+        </InlineAlert>
       )}
     </div>
   );

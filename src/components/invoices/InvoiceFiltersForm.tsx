@@ -3,6 +3,9 @@
 import { useRef } from "react";
 import { Search, X } from "lucide-react";
 import Link from "next/link";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { fieldClasses, labelClasses } from "@/components/ui/Field";
+import { cx } from "@/components/ui/cx";
 
 interface InvoiceFiltersFormProps {
   date: string;
@@ -24,18 +27,18 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
   const formRef = useRef<HTMLFormElement>(null);
   const submit = () => formRef.current?.requestSubmit();
 
-  const fieldClass =
-    "h-11 rounded-lg border-2 border-zinc-300 bg-white px-3 text-base font-medium focus:border-emerald-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900";
+  const fieldClass = fieldClasses({ className: "w-auto" });
+  const labelClass = cx("flex flex-col gap-1.5", labelClasses);
 
   return (
     <form ref={formRef} method="get" action="/invoices" className="flex flex-wrap items-end gap-3">
       {locked ? (
-        <p className="flex h-11 items-center rounded-lg bg-zinc-100 px-3 text-sm font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+        <p className="flex h-11 items-center rounded-control border border-ink bg-paper-2 px-3 text-sm font-bold text-ink">
           {counterCode ? `Counter ${counterCode}` : "No counter"} · Today
         </p>
       ) : (
         <>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+          <label className={labelClass}>
             Date (IST)
             <input
               type="date"
@@ -44,10 +47,10 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
               max={today}
               required
               onChange={(e) => e.target.value && submit()}
-              className={fieldClass}
+              className={cx(fieldClass, "num")}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+          <label className={labelClass}>
             Counter
             <select name="counter" defaultValue={counterCode ?? ""} onChange={submit} className={fieldClass}>
               <option value="">All counters</option>
@@ -61,10 +64,10 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
         </>
       )}
 
-      <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+      <label className={cx(labelClass, "min-w-56 flex-1")}>
         Invoice number
         <span className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-500" aria-hidden />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-ink-muted" aria-hidden />
           <input
             type="text"
             name="q"
@@ -73,28 +76,25 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
             autoComplete="off"
             spellCheck={false}
             enterKeyHint="search"
-            className={`${fieldClass} w-full pl-9`}
+            className={fieldClasses({ withIcon: true })}
           />
         </span>
       </label>
 
-      <button
-        type="submit"
-        className="h-11 rounded-lg bg-emerald-700 px-5 text-sm font-bold text-white hover:bg-emerald-800"
-      >
+      <Button type="submit" variant="primary" size="sm" className="px-5">
         Search
-      </button>
+      </Button>
       {search && (
         <Link
           href={locked ? "/invoices" : `/invoices?date=${date}${counterCode ? `&counter=${counterCode}` : ""}`}
-          className="flex h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          className={buttonClasses({ variant: "ghost", size: "sm", link: true, className: "gap-1" })}
         >
           <X className="h-4 w-4" aria-hidden />
           Clear search
         </Link>
       )}
       {!locked && (
-        <p className="basis-full text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="basis-full text-sm text-ink-muted">
           A number search covers all dates; the counter filter still applies.
         </p>
       )}

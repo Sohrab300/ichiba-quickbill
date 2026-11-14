@@ -6,6 +6,12 @@ import { getInvoiceForReprint, getRecentInvoices, type RecentInvoice } from "@/l
 import { resolvePrintWidth, type PrintWidth } from "@/lib/print-settings";
 import { formatINR } from "@/lib/format";
 import { printInvoice } from "@/components/print/print";
+import { InlineAlert } from "@/components/ui/Alert";
+import { Kbd } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { cardClasses } from "@/components/ui/Card";
+import { fieldClasses } from "@/components/ui/Field";
+import { cx } from "@/components/ui/cx";
 import { Modal } from "./Modal";
 import { paymentLabel } from "./PaymentButtons";
 
@@ -139,35 +145,36 @@ export function PreviousInvoiceDialog({ onClose, isAdmin, counterCode, printWidt
     <Modal open title="Print previous invoice" onClose={onClose} size="max-w-lg">
       <div className="space-y-4" onKeyDown={onKeyDown}>
         {/* Selected invoice + Reprint */}
-        <div className="rounded-xl border-2 border-zinc-300 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-950">
+        <div className={cardClasses({ className: "p-3" })}>
           {selected ? (
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <div className="min-w-0">
-                <p className="break-all font-mono text-lg font-bold">{selected.invoiceNo}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {when(selected.createdAt, today)} · {paymentLabel(selected.paymentMethod)}
+                <p className="font-mono text-lg font-bold break-all tabular-nums">{selected.invoiceNo}</p>
+                <p className="text-sm text-ink-muted">
+                  <span className="num">{when(selected.createdAt, today)}</span> · {paymentLabel(selected.paymentMethod)}
                   {selected.counterCode !== counterCode && ` · Counter ${selected.counterCode}`}
                 </p>
               </div>
-              <p className="shrink-0 text-xl font-bold tabular-nums">{formatINR(selected.grandTotal)}</p>
+              <p className="shrink-0 font-display text-2xl leading-none font-extrabold tabular-nums">{formatINR(selected.grandTotal)}</p>
             </div>
           ) : (
-            <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">{current ? "Nothing selected." : "Loading…"}</p>
+            <p className="mb-3 text-sm text-ink-muted">{current ? "Nothing selected." : "Loading…"}</p>
           )}
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
+            block
             onClick={() => selected && void doReprint(selected)}
             disabled={!selected || reprint.busy}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 text-lg font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
           >
             {reprint.busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Printer className="h-5 w-5" aria-hidden />}
             Reprint
-            <kbd className="hidden rounded bg-black/20 px-1.5 font-mono text-[11px] lg:inline">Enter</kbd>
-          </button>
+            <Kbd className="hidden lg:inline">Enter</Kbd>
+          </Button>
           {reprint.error && (
-            <p role="alert" className="mt-2 text-sm font-medium text-red-800 dark:text-red-300">
+            <InlineAlert tone="danger" role="alert" className="mt-2">
               {reprint.error}
-            </p>
+            </InlineAlert>
           )}
         </div>
 
@@ -177,7 +184,7 @@ export function PreviousInvoiceDialog({ onClose, isAdmin, counterCode, printWidt
             Search by invoice number
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-zinc-500" aria-hidden />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-ink-muted" aria-hidden />
             <input
               ref={searchRef}
               id="previous-invoice-search"
@@ -194,25 +201,25 @@ export function PreviousInvoiceDialog({ onClose, isAdmin, counterCode, printWidt
               }}
               placeholder="Invoice number, e.g. 000123"
               aria-controls="previous-invoice-list"
-              className="h-12 w-full rounded-xl border-2 border-zinc-300 bg-white pr-3 pl-10 text-base font-medium focus:border-emerald-600 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900"
+              className={fieldClasses({ fieldSize: "lg", withIcon: true })}
             />
           </div>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{scopeHint} ↑ ↓ to choose.</p>
+          <p className="mt-1.5 text-sm text-ink-muted">{scopeHint} ↑ ↓ to choose.</p>
         </div>
 
         {/* List */}
         <div className="min-h-24">
           {!current ? (
-            <div className="flex items-center justify-center py-6 text-zinc-500" role="status">
+            <div className="flex items-center justify-center py-6 text-brand" role="status">
               <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
               <span className="sr-only">Loading invoices…</span>
             </div>
           ) : current.error ? (
-            <p role="alert" className="py-4 text-sm font-medium text-red-800 dark:text-red-300">
+            <InlineAlert tone="danger" role="alert" className="py-4">
               {current.error}
-            </p>
+            </InlineAlert>
           ) : invoices.length === 0 ? (
-            <p className="py-6 text-center text-base text-zinc-600 dark:text-zinc-400">
+            <p className="py-6 text-center text-base text-ink-muted">
               {term
                 ? `No invoice number contains “${term}”${isAdmin ? "" : " today on this counter"}.`
                 : counterCode
@@ -225,7 +232,7 @@ export function PreviousInvoiceDialog({ onClose, isAdmin, counterCode, printWidt
               id="previous-invoice-list"
               role="listbox"
               aria-label={term ? "Matching invoices" : "Today's invoices"}
-              className="max-h-[min(18rem,40dvh)] divide-y divide-zinc-200 overflow-y-auto rounded-xl border-2 border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
+              className="max-h-[min(18rem,40dvh)] divide-y divide-ink/15 overflow-y-auto rounded-card border border-ink bg-surface"
             >
               {invoices.map((inv) => {
                 const isSelected = inv.id === selected?.id;
@@ -240,20 +247,19 @@ export function PreviousInvoiceDialog({ onClose, isAdmin, counterCode, printWidt
                       searchRef.current?.focus();
                     }}
                     onDoubleClick={() => void doReprint(inv)}
-                    className={`flex min-h-12 cursor-pointer items-center justify-between gap-3 px-3 py-2 ${
-                      isSelected
-                        ? "bg-emerald-100 text-emerald-950 dark:bg-emerald-900/50 dark:text-emerald-50"
-                        : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                    }`}
+                    className={cx(
+                      "flex min-h-12 cursor-pointer items-center justify-between gap-3 px-3 py-2",
+                      isSelected ? "bg-ink text-paper" : "hover:bg-brand-soft"
+                    )}
                   >
                     <div className="min-w-0">
-                      <p className="break-all font-mono text-sm font-bold">{inv.invoiceNo}</p>
-                      <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                        {when(inv.createdAt, today)} · {paymentLabel(inv.paymentMethod)}
+                      <p className="font-mono text-sm font-bold break-all tabular-nums">{inv.invoiceNo}</p>
+                      <p className={cx("text-sm", isSelected ? "text-paper/85" : "text-ink-muted")}>
+                        <span className="num">{when(inv.createdAt, today)}</span> · {paymentLabel(inv.paymentMethod)}
                         {inv.counterCode !== counterCode && ` · ${inv.counterCode}`}
                       </p>
                     </div>
-                    <span className="shrink-0 font-semibold tabular-nums">{formatINR(inv.grandTotal)}</span>
+                    <span className="num shrink-0 font-bold">{formatINR(inv.grandTotal)}</span>
                   </li>
                 );
               })}

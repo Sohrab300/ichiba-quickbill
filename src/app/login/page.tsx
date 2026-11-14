@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import LoginForm from "@/components/LoginForm";
+import { LoginBackdrop } from "@/components/brand/LoginBackdrop";
 import PageLoading from "@/components/PageLoading";
 import { safeNextPath, tryGetStaffContext } from "@/lib/auth";
 
@@ -13,7 +14,8 @@ export default function LoginPage({
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
   return (
-    <div className="flex flex-1 items-start justify-center px-4 py-10 sm:py-16">
+    <div className="relative isolate flex flex-1 items-start justify-center px-4 py-10 sm:py-16">
+      <LoginBackdrop />
       <Suspense fallback={<PageLoading />}>
         <Login searchParams={searchParams} />
       </Suspense>

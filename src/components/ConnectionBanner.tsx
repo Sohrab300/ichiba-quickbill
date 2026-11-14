@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { WifiOff } from "lucide-react";
+import { AlertIcon } from "@/components/ui/Alert";
 import { getConnectivity, getServerConnectivity, subscribeConnectivity, type Connectivity } from "@/lib/connectivity";
 
 export function useConnectivity(): Connectivity {
@@ -23,9 +24,9 @@ export function ConnectionBanner() {
     <div
       id="connection-banner"
       role="alert"
-      className="flex w-full items-center justify-center gap-3 bg-red-700 px-4 py-2 text-white lg:h-12 lg:py-0"
+      className="flex w-full items-center justify-center gap-3 border-b border-ink bg-danger-soft px-4 py-2 text-ink lg:h-12 lg:py-0"
     >
-      <WifiOff className="h-5 w-5 shrink-0" aria-hidden />
+      <AlertIcon tone="danger" size="sm" icon={<WifiOff />} />
       <p className="min-w-0 text-sm leading-tight lg:truncate">
         <strong className="text-base">You&apos;re offline — sale can&apos;t be completed.</strong>{" "}
         {state === "offline"

@@ -10,6 +10,10 @@ import {
   subscribePrintWidthOverride,
   type PrintWidth,
 } from "@/lib/print-settings";
+import { Alert, InlineAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
+import { PlainNumbers } from "@/components/ui/PlainNumbers";
 import { printTestPage } from "./print";
 
 interface PrintSettingsDialogProps {
@@ -54,18 +58,17 @@ export function PrintSettingsDialog({ open, onClose, counterWidth, counterCode }
     <Modal open={open} title="Printer settings" onClose={onClose}>
       <div className="space-y-5">
         <fieldset>
-          <legend className="mb-2 text-sm font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+          <legend className="mb-2 text-sm font-bold tracking-wide text-ink-muted uppercase">
             Receipt paper width
           </legend>
           <div className="space-y-2">
             {options.map((o) => (
               <label
                 key={o.value}
-                className={`flex cursor-pointer items-start gap-3 rounded-xl border-2 p-3 ${
-                  choice === o.value
-                    ? "border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40"
-                    : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700"
-                }`}
+                className={cx(
+                  "flex cursor-pointer items-start gap-3 rounded-card border p-3",
+                  choice === o.value ? "border-ink bg-brand-soft shadow-hard-sm" : "border-ink/30 bg-surface hover:border-ink"
+                )}
               >
                 <input
                   type="radio"
@@ -73,44 +76,39 @@ export function PrintSettingsDialog({ open, onClose, counterWidth, counterCode }
                   value={o.value}
                   checked={choice === o.value}
                   onChange={() => setPrintWidthOverride(o.value === "counter" ? null : o.value === "58" ? 58 : 80)}
-                  className="mt-1 h-4 w-4 accent-emerald-700"
+                  className="mt-0.5 h-5 w-5 accent-brand"
                 />
                 <span>
-                  <span className="block text-base font-semibold">{o.label}</span>
-                  <span className="block text-sm text-zinc-600 dark:text-zinc-400">{o.hint}</span>
+                  <span className="block text-base font-bold">
+                    <PlainNumbers text={o.label} />
+                  </span>
+                  <span className="block text-sm text-ink-muted">
+                    <PlainNumbers text={o.hint} />
+                  </span>
                 </span>
               </label>
             ))}
           </div>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Saved in this browser only. Bills print at <strong className="text-zinc-900 dark:text-zinc-100">{effective} mm</strong>.
+          <p className="mt-2 text-sm text-ink-muted">
+            Saved in this browser only. Bills print at <strong className="num text-ink">{effective} mm</strong>.
           </p>
         </fieldset>
 
-        <div className="rounded-xl bg-zinc-100 p-3 text-sm text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+        <Alert tone="info" size="sm">
           In the print dialog choose the receipt printer, set <strong>Margins: None</strong> and turn off{" "}
           <strong>Headers and footers</strong>. The test prints two pages — the printer should cut between them.
-        </div>
+        </Alert>
 
-        {error && <p className="text-sm font-medium text-red-800 dark:text-red-300">{error}</p>}
+        {error && <InlineAlert tone="danger">{error}</InlineAlert>}
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-12 rounded-xl border-2 border-zinc-300 px-5 text-base font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
+          <Button variant="secondary" onClick={onClose} className="px-5">
             Done
-          </button>
-          <button
-            type="button"
-            onClick={() => void printTest()}
-            disabled={testing}
-            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-base font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
-          >
+          </Button>
+          <Button variant="primary" onClick={() => void printTest()} disabled={testing} className="px-5">
             {testing ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Printer className="h-5 w-5" aria-hidden />}
             Print test page
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

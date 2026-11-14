@@ -1,5 +1,8 @@
 import { Suspense } from "react";
 import PageLoading from "@/components/PageLoading";
+import { Alert } from "@/components/ui/Alert";
+import { Card } from "@/components/ui/Card";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SettingsForms, type CounterSettings, type StoreSettings } from "@/components/settings/SettingsForms";
 import { requireStaffForPage } from "@/lib/auth";
 import { createServerClient } from "@/lib/supabase/server";
@@ -66,20 +69,20 @@ async function Settings() {
 
   const content =
     staff.role !== "admin" ? (
-      <p className="rounded-xl border border-zinc-200 bg-white p-6 text-center font-medium dark:border-zinc-800 dark:bg-zinc-900">
-        Only an admin can change settings.
-      </p>
+      <Card className="p-6 text-center font-semibold">
+        <p>Only an admin can change settings.</p>
+      </Card>
     ) : data ? (
       <SettingsForms store={data.store} counters={data.counters} />
     ) : (
-      <p role="alert" className="rounded-xl border-2 border-red-300 bg-red-50 p-4 font-medium text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-        {error ?? "Could not load settings."}
-      </p>
+      <Alert tone="danger" role="alert">
+        <p className="text-base font-semibold">{error ?? "Could not load settings."}</p>
+      </Alert>
     );
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6">
-      <h1 className="text-2xl font-extrabold tracking-tight">Settings</h1>
+      <PageHeader title="Settings" />
       {content}
     </div>
   );

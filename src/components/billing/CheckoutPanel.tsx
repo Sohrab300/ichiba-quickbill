@@ -4,6 +4,9 @@ import { useState, type ReactNode } from "react";
 import { ChevronUp } from "lucide-react";
 import { formatINR } from "@/lib/format";
 import type { GstTotals } from "@/lib/gst";
+import { Badge } from "@/components/ui/Badge";
+import { cardClasses } from "@/components/ui/Card";
+import { cx } from "@/components/ui/cx";
 
 /** "+₹0.40" / "−₹0.49" / "₹0.00" */
 function formatSigned(paise: number): string {
@@ -13,24 +16,21 @@ function formatSigned(paise: number): string {
 
 function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className={`flex items-baseline justify-between gap-3 py-0.5 ${strong ? "font-semibold text-zinc-950 dark:text-zinc-50" : ""}`}>
-      <dt className="text-zinc-700 dark:text-zinc-300">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+    <div className={cx("flex items-baseline justify-between gap-3 py-0.5", strong && "font-bold")}>
+      <dt>{label}</dt>
+      <dd className="num">{value}</dd>
     </div>
   );
 }
 
 function BillSummary({ totals }: { totals: GstTotals }) {
   return (
-    <section aria-label="Bill summary (preview)" className="rounded-xl border-2 border-zinc-200 bg-white p-3 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+    <section aria-label="Bill summary (preview)" className={cardClasses({ raised: false, className: "p-3 text-sm" })}>
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-xs font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Bill summary</h2>
-        <span
-          className="rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-          title="Calculated on this device from the prices at scan time. The printed invoice uses the amounts saved on the server."
-        >
+        <h2 className="text-xs font-bold tracking-wide text-ink-muted uppercase">Bill summary</h2>
+        <Badge title="Calculated on this device from the prices at scan time. The printed invoice uses the amounts saved on the server.">
           Preview
-        </span>
+        </Badge>
       </div>
       <dl>
         <Row label="Items" value={`${totals.itemCount} lines · ${totals.totalQty} qty`} />
@@ -68,7 +68,7 @@ export function CheckoutPanel({ totals, status, notice, payment, mobilePayment, 
   return (
     <aside
       aria-label="Total and payment"
-      className="sticky bottom-0 z-20 flex flex-col gap-3 lg:min-h-0 border-t-2 border-zinc-300 bg-zinc-100 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] lg:static lg:z-auto lg:w-[35%] lg:max-w-xl lg:min-w-[22rem] lg:border-t-0 lg:border-l-2 lg:p-4 lg:shadow-none dark:border-zinc-800 dark:bg-zinc-900"
+      className="sticky bottom-0 z-20 flex flex-col gap-3 border-t-strong border-ink bg-paper-2 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:static lg:z-auto lg:min-h-0 lg:w-[35%] lg:max-w-xl lg:min-w-[22rem] lg:border-t-0 lg:border-l-strong lg:p-4"
     >
       {/* Breakdown: always shown on desktop (shrinks and scrolls if space runs out), toggled on phones. */}
       <div
@@ -97,19 +97,23 @@ export function CheckoutPanel({ totals, status, notice, payment, mobilePayment, 
           type="button"
           onClick={() => setShowDetails((v) => !v)}
           aria-expanded={showDetails}
-          className="flex h-11 items-center gap-1 rounded-lg px-1 text-left"
+          className="flex h-11 items-center gap-1 rounded-control px-1 text-left"
         >
           <span>
-            <span className="block text-xs font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-              Total · {totals.totalQty} qty
+            <span className="block text-xs font-bold tracking-wide text-ink-muted uppercase">
+              Total · <span className="num">{totals.totalQty}</span> qty
             </span>
-            <span className="text-[11px] text-zinc-500">{showDetails ? "Hide" : "Show"} GST preview</span>
+            <span className="text-sm font-semibold text-ink underline decoration-ink/40 underline-offset-2">
+              {showDetails ? "Hide" : "Show"} GST preview
+            </span>
           </span>
-          <ChevronUp className={`h-5 w-5 text-zinc-600 transition-transform ${showDetails ? "" : "rotate-180"}`} aria-hidden />
+          <ChevronUp className={`h-5 w-5 text-ink transition-transform ${showDetails ? "" : "rotate-180"}`} aria-hidden />
         </button>
         <div className="flex items-center gap-2">
           {mobileActions}
-          <span className="text-3xl font-black tabular-nums text-zinc-950 dark:text-zinc-50">{formatINR(totals.grandTotal)}</span>
+          <span className="font-display text-3xl leading-none font-extrabold text-ink tabular-nums">
+            {formatINR(totals.grandTotal)}
+          </span>
         </div>
       </div>
 
@@ -121,12 +125,12 @@ export function CheckoutPanel({ totals, status, notice, payment, mobilePayment, 
 
 function TotalDisplay({ totals }: { totals: GstTotals }) {
   return (
-    <div className="rounded-xl bg-zinc-950 px-4 py-3 text-white dark:bg-black">
-      <div className="flex items-baseline justify-between">
-        <span className="text-sm font-bold uppercase tracking-wide text-zinc-300">Total</span>
-        <span className="text-xs text-zinc-400">preview · invoice uses server amounts</span>
+    <div className="rounded-card border-strong border-ink bg-ink px-4 pt-2.5 pb-2 text-paper shadow-hard-brand">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-display text-lg font-bold tracking-wide uppercase">Total</span>
+        <span className="text-xs text-paper/85">preview · invoice uses server amounts</span>
       </div>
-      <p className="text-right text-5xl font-black leading-tight tabular-nums">{formatINR(totals.grandTotal)}</p>
+      <p className="text-right font-display text-6xl leading-none font-extrabold tabular-nums">{formatINR(totals.grandTotal)}</p>
     </div>
   );
 }

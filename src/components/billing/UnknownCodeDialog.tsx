@@ -5,6 +5,10 @@ import { Link2, Loader2, PackagePlus, Search } from "lucide-react";
 import { addProductBarcode } from "@/lib/actions";
 import { formatINR } from "@/lib/format";
 import type { Product } from "@/lib/supabase/mappers";
+import { InlineAlert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input, labelClasses } from "@/components/ui/Field";
 import { Modal } from "./Modal";
 import { useProductSearch } from "./useProductSearch";
 
@@ -55,27 +59,23 @@ function LinkForm({ code, onLinked, onCreateNew }: { code: string; onLinked: (p:
 
   return (
     <div className="space-y-4">
-      <p className="text-base text-zinc-700 dark:text-zinc-300">
-        <span className="rounded bg-zinc-200 px-2 py-0.5 font-mono font-bold text-zinc-950 dark:bg-zinc-800 dark:text-zinc-50">{code}</span>{" "}
+      <p className="text-base text-ink">
+        <span className="rounded-md border border-ink bg-surface px-2 py-0.5 font-mono font-bold text-ink">{code}</span>{" "}
         did not match any barcode or item code.
       </p>
 
-      <button
-        type="button"
-        onClick={() => onCreateNew(code)}
-        className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-700 text-base font-bold text-white hover:bg-emerald-800"
-      >
+      <Button variant="primary" size="lg" block onClick={() => onCreateNew(code)} className="text-base">
         <PackagePlus className="h-5 w-5" aria-hidden />
         Create a new product with this barcode
-      </button>
+      </Button>
 
       <div className="space-y-2">
-        <label htmlFor="link-search" className="block text-sm font-bold text-zinc-800 dark:text-zinc-200">
+        <label htmlFor="link-search" className={`block ${labelClasses}`}>
           …or link it to an existing product
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" aria-hidden />
-          <input
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-ink-muted" aria-hidden />
+          <Input
             id="link-search"
             type="text"
             autoFocus
@@ -86,47 +86,49 @@ function LinkForm({ code, onLinked, onCreateNew }: { code: string; onLinked: (p:
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or item code"
-            className="h-12 w-full rounded-xl border-2 border-zinc-300 bg-white pl-10 pr-3 text-base focus:border-emerald-600 focus:outline-none dark:border-zinc-600 dark:bg-zinc-950"
+            fieldSize="lg"
+            withIcon
           />
         </div>
 
         {error && (
-          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-900 dark:bg-red-950/50 dark:text-red-200">
+          <InlineAlert tone="danger" role="alert">
             {error}
-          </p>
+          </InlineAlert>
         )}
 
         {search.active && (
-          <ul className="max-h-72 divide-y divide-zinc-200 overflow-y-auto rounded-xl border-2 border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+          <ul className="max-h-72 divide-y divide-ink/15 overflow-y-auto rounded-card border border-ink bg-surface">
             {search.loading && (
-              <li className="flex items-center gap-2 p-3 text-sm text-zinc-600">
+              <li className="flex items-center gap-2 p-3 text-sm text-ink-muted">
                 <Loader2 className="h-4 w-4 animate-spin" /> Searching…
               </li>
             )}
             {!search.loading && search.products.length === 0 && (
-              <li className="p-3 text-sm text-zinc-600 dark:text-zinc-400">{search.error ?? "No products found."}</li>
+              <li className="p-3 text-sm text-ink-muted">{search.error ?? "No products found."}</li>
             )}
             {search.products.map((p) => (
               <li key={p.id} className="flex items-center gap-3 p-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">
+                  <p className="truncate font-bold">
                     {p.name}
-                    {!p.isActive && <span className="ml-2 rounded bg-zinc-200 px-1.5 text-xs font-bold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">INACTIVE</span>}
+                    {!p.isActive && <Badge className="ml-2">INACTIVE</Badge>}
                   </p>
-                  <p className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                    {p.itemCode} · {formatINR(p.sellingPrice)}
-                    {p.barcodes.length > 0 && ` · ${p.barcodes.length} barcode${p.barcodes.length > 1 ? "s" : ""}`}
+                  <p className="text-sm text-ink-muted">
+                    <span className="font-mono">{p.itemCode}</span> · <span className="num">{formatINR(p.sellingPrice)}</span>
+                    {p.barcodes.length > 0 && (
+                      <>
+                        {" · "}
+                        <span className="num">{p.barcodes.length}</span>
+                        {` barcode${p.barcodes.length > 1 ? "s" : ""}`}
+                      </>
+                    )}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => link(p)}
-                  disabled={linking !== null}
-                  className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg border-2 border-zinc-900 px-3 text-sm font-bold text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-50 dark:border-zinc-200 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-                >
+                <Button variant="secondary" size="sm" onClick={() => link(p)} disabled={linking !== null} className="gap-1.5">
                   {linking === p.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Link2 className="h-4 w-4" aria-hidden />}
                   Link
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
