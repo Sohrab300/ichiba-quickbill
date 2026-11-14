@@ -80,6 +80,8 @@ imported fields for matching item codes; products not in the CSV are never touch
 - The counter used for an invoice is **always derived on the server from the logged-in user's
   profile**. Any counter ID sent by the browser is ignored. Mobile cashiers map to `MOB`.
 - All pages and API routes require login. Product create/edit/delete and settings require `admin`.
+- **[DEFAULT]** Cashiers must have a counter; an admin's counter is optional (an admin without one
+  can manage the catalog but not bill). `staff_profiles.is_active = false` locks a login out at once.
 - Session refresh via Next.js `proxy.ts` (Next 16's name for middleware) with `@supabase/ssr`.
 
 ## 5. Invoice numbering

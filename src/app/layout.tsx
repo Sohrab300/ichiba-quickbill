@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
+import { tryGetStaffContext } from "@/lib/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,9 +31,27 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        <Navbar />
+        <Suspense fallback={<Navbar staff={null} />}>
+          <SessionNavbar />
+        </Suspense>
         <main className="flex-1 flex flex-col">{children}</main>
       </body>
     </html>
+  );
+}
+
+/** Reads the session behind its own Suspense boundary so it never blocks the page shell. */
+async function SessionNavbar() {
+  const { staff } = await tryGetStaffContext();
+  return (
+    <Navbar
+      staff={
+        staff && {
+          displayName: staff.displayName,
+          role: staff.role,
+          counterCode: staff.counter?.code ?? null,
+        }
+      }
+    />
   );
 }

@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      counters: {
+        Row: {
+          code: string
+          created_at: string
+          id: string
+          invoice_prefix: string
+          is_active: boolean
+          kind: string
+          print_width_mm: number
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          id?: string
+          invoice_prefix: string
+          is_active?: boolean
+          kind: string
+          print_width_mm?: number
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          id?: string
+          invoice_prefix?: string
+          is_active?: boolean
+          kind?: string
+          print_width_mm?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       product_barcodes: {
         Row: {
           barcode: string
@@ -118,6 +151,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      staff_profiles: {
+        Row: {
+          counter_id: string | null
+          created_at: string
+          display_name: string
+          is_active: boolean
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          counter_id?: string | null
+          created_at?: string
+          display_name: string
+          is_active?: boolean
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          counter_id?: string | null
+          created_at?: string
+          display_name?: string
+          is_active?: boolean
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_profiles_counter_id_fkey"
+            columns: ["counter_id"]
+            isOneToOne: false
+            referencedRelation: "counters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       store_settings: {
         Row: {

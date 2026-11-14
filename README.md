@@ -39,6 +39,8 @@ A simple, fast, barcode-scanning billing web application built for the **Ichiba*
 
 ## 🔐 Supabase Architecture & Security
 
+- **Login required everywhere**: Supabase Auth (email + password). `src/proxy.ts` refreshes the session cookie and sends signed-out visitors to `/login`. Every Server Action calls `getStaffContext()` (`src/lib/auth.ts`) first, which derives the user, role and **counter** from the session + `staff_profiles` — a counter id from the browser is never accepted. Product create/edit/delete and barcode linking need role `admin`.
+- **Two Supabase clients**: a cookie-based client with the publishable key (`src/lib/supabase/session.ts`) only reads/refreshes the session; all data access uses the server-only secret-key client (`src/lib/supabase/server.ts`).
 - **Row Level Security (RLS)**: Enabled across `products`, `sales`, and `sale_items`. No public access policies are granted, meaning the public `anon` key cannot read or alter store data.
 - **Server-Only Service Role Client**: Database access is performed exclusively on the server in `src/lib/supabase/server.ts` guarded by `import "server-only"`. The `SUPABASE_SERVICE_ROLE_KEY` is never sent or exposed to client browsers.
 - **Atomic `complete_sale` RPC**: Executes inside a single PostgreSQL transaction. Product prices and names are retrieved directly from the database (not trusted from client payloads). Execution is revoked from `anon`/`authenticated` and granted strictly to `service_role`.
@@ -57,8 +59,9 @@ Follow these steps to set up your hosted Supabase Postgres database:
 In your Supabase project dashboard:
 1. Navigate to **Project Settings** (gear icon) -> **API**.
 2. Copy the **Project URL** (e.g. `https://xyzcompany.supabase.co`).
-3. Under **Project API keys**, find `service_role` (click "Reveal").
+3. Under **API Keys**, copy the **publishable** key (`sb_publishable_...`) and the `service_role` / secret key (click "Reveal").
    > ⚠️ **IMPORTANT**: `service_role` has admin privileges and bypasses RLS. Keep it secret. Never commit it to git or prefix it with `NEXT_PUBLIC_`.
+4. Under **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up". Staff logins are created with `npm run staff:create` only.
 
 ### 3. Configure Local Environment
 Create your local environment file:
@@ -68,8 +71,10 @@ cp .env.example .env.local
 Fill in the values in `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
+Add the same three variables in Vercel → Settings → Environment Variables.
 
 ### 4. Link Project & Push Migrations
 Authenticate the Supabase CLI and link your hosted project:
@@ -97,7 +102,15 @@ npx supabase db push --include-seed
 2. Open `supabase/seed.sql` in this repo, copy its contents, and paste into the query editor.
 3. Click **Run**.
 
-### 6. (Optional) Regenerating TypeScript Database Types
+### 6. Create Staff Logins
+Counters `CL1`, `CL2`, `CL3` (desk) and `MOB` (mobile) are created by the migration. Create one login per counter PC, mobile cashier logins on `MOB`, and an admin:
+```bash
+npm run staff:create -- --email cl1@ichiba.local --password '<password>' --name "Counter 1" --role cashier --counter CL1
+npm run staff:create -- --email admin@ichiba.local --password '<password>' --name "Store Admin" --role admin
+```
+`--counter` is required for cashiers and optional for admins. To lock a login out, set `staff_profiles.is_active = false`.
+
+### 7. (Optional) Regenerating TypeScript Database Types
 Whenever you update your database schema in Supabase, you can regenerate `database.types.ts`:
 ```bash
 npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
@@ -139,7 +152,6 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 🔮 Future Ideas & Roadmap
 
-- **Multi-Worker Supabase Auth & Per-Worker RLS**: Add worker login accounts with role-based policies (e.g. Cashier vs Store Manager).
 - **GST / Tax Breakdown**: Configure GST rates (5%, 12%, 18%) per product category with CGST/SGST line receipts.
 - **ESC/POS Thermal Receipt Printing**: Direct Bluetooth or WebUSB thermal receipt printer integration.
 - **Inventory & Low Stock Alerts**: Decrement stock quantities on sale completion with low stock warnings.

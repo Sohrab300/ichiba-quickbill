@@ -1,10 +1,11 @@
 "use server";
 
-// NOTE: no authentication yet — every action below is callable by anyone who can reach the app.
-// Prompt 2 (login, counters, roles) adds getStaffContext() checks to each of them.
+// Every action below calls getStaffContext() before anything else: Server Actions are public
+// POST endpoints, so the proxy.ts redirect alone does not protect them.
 
 import { z } from "zod";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { AuthError, getStaffContext } from "./auth";
 import { createServerClient } from "./supabase/server";
 import type { Database } from "./supabase/database.types";
 import { mapProductFromDb, type Product, type ProductBarcode } from "./supabase/mappers";
@@ -43,6 +44,7 @@ function fail<T>(error: string, statusCode: number): ActionResult<T> {
 }
 
 function fromException<T>(err: unknown, fallback: string, statusCode = 500): ActionResult<T> {
+  if (err instanceof AuthError) return fail(err.message, err.status);
   if (err instanceof z.ZodError) {
     return fail(err.issues.map((i) => i.message).join("; "), 400);
   }
@@ -96,6 +98,7 @@ async function checkBarcodeAvailable(barcode: string, forProductId?: string): Pr
  */
 export async function lookupProduct(code: string): Promise<ActionResult<Product | null>> {
   try {
+    await getStaffContext();
     const parsed = barcodeSchema.safeParse(code ?? "");
     if (!parsed.success) return { success: true, data: null, statusCode: 404 };
 
@@ -119,6 +122,7 @@ export async function getProducts(
   input: ProductSearchInput = {}
 ): Promise<ActionResult<ProductList>> {
   try {
+    await getStaffContext();
     const { query: rawQuery, limit } = productSearchSchema.parse(input);
     const supabase = createServerClient();
     let query = supabase
@@ -164,6 +168,7 @@ export async function getProducts(
  */
 export async function createProduct(input: CreateProductInput): Promise<ActionResult<Product>> {
   try {
+    await getStaffContext("admin");
     const v = createProductSchema.parse(input);
     const supabase = createServerClient();
 
@@ -219,6 +224,7 @@ export async function updateProduct(
   input: UpdateProductInput
 ): Promise<ActionResult<Product>> {
   try {
+    await getStaffContext("admin");
     const productId = uuidSchema.parse(id);
     const v = updateProductSchema.parse(input);
 
@@ -256,6 +262,7 @@ export async function updateProduct(
  */
 export async function deleteProduct(id: string): Promise<ActionResult<boolean>> {
   try {
+    await getStaffContext("admin");
     const productId = uuidSchema.parse(id);
     const supabase = createServerClient();
     const { error } = await supabase.from("products").delete().eq("id", productId);
@@ -274,6 +281,7 @@ export async function addProductBarcode(
   barcode: string
 ): Promise<ActionResult<ProductBarcode>> {
   try {
+    await getStaffContext("admin");
     const id = uuidSchema.parse(productId);
     const code = barcodeSchema.parse(barcode);
     const conflict = await checkBarcodeAvailable(code, id);
@@ -300,6 +308,7 @@ export async function addProductBarcode(
  */
 export async function removeProductBarcode(barcodeId: string): Promise<ActionResult<boolean>> {
   try {
+    await getStaffContext("admin");
     const id = uuidSchema.parse(barcodeId);
     const supabase = createServerClient();
     const { error } = await supabase.from("product_barcodes").delete().eq("id", id);
@@ -315,8 +324,13 @@ export async function removeProductBarcode(barcodeId: string): Promise<ActionRes
  * (GST, invoice numbers, idempotency — REQUIREMENTS.md sections 3, 5, 6) replaces it in prompt 3.
  */
 export async function completeSale(): Promise<ActionResult<{ saleId: string }>> {
-  return fail(
-    "Checkout is disabled until invoice creation (GST and invoice numbers) is built.",
-    501
-  );
+  try {
+    await getStaffContext();
+    return fail(
+      "Checkout is disabled until invoice creation (GST and invoice numbers) is built.",
+      501
+    );
+  } catch (err: unknown) {
+    return fromException(err, "Failed to complete sale");
+  }
 }
