@@ -197,7 +197,7 @@ cards; then a sticky bottom bar with the total, the payment method as three larg
 UPI / Card) and one **Complete** button (see section 14). Print Previous Invoice and Clear Cart move
 into a menu.
 
-**General:** light theme, high contrast, big touch targets (≥ 44px), rupee amounts right-aligned with
+**General:** Sekai Ichiba brand theme (section 15), light only, high contrast, big touch targets (≥ 44px), rupee amounts right-aligned with
 `en-IN` formatting, success/error beeps on scan, focus returns to the scan box after every action.
 
 ## 13. Decisions made during the build (prompt 3)
@@ -240,3 +240,18 @@ into a menu.
   `service_role`-only EXECUTE. `npm run db:audit` re-checks it.
 - **Mobile sequence.** The counter comes from the login's staff profile, not the device: a phone
   bills on MOB because its login is a MOB login (create phones' logins with `--counter MOB`).
+
+## 15. Brand and visual style (reference: `docs/ichiba-brand.png`, logo `public/ichiba-logo.png`)
+
+- Palette: paper/cream `#F7EDDF` (page background), ink `#1C1A1B` (text, outlines), Ichiba red
+  `#BE2C31` (brand, primary actions), bright red `#CA3530` (accents/illustration only), white
+  `#FFFFFF` (cards, inputs). No grey-blue SaaS look, no green/emerald brand colour.
+- Look: flat, sticker-like — solid fills, thick ink outlines (2–3px), rounded corners, hard offset
+  shadows in ink instead of soft blurry shadows. Illustrations are line icons with ink strokes and
+  red fills, like the reference.
+- Type: a bold rounded display face for headings, totals and buttons; a clean sans for body; all
+  money and quantities in tabular figures.
+- Light theme only (no dark mode): counters run in bright stores and the brand is cream/red.
+- Status colours stay distinguishable from brand red: success = deep green, warning = amber/mustard,
+  error = red with an icon and wording (never colour alone).
+- Printed receipts stay plain black on white (thermal printers) — the theme is screen-only.

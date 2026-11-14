@@ -2,8 +2,9 @@
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Package, Store, LogOut, Printer, ReceiptText, Settings } from "lucide-react";
+import { ShoppingCart, Package, LogOut, Printer, ReceiptText, Settings } from "lucide-react";
 import { signOut } from "@/lib/auth-actions";
 import type { PrintWidth } from "@/lib/print-settings";
 import { PrintSettingsDialog } from "@/components/print/PrintSettingsDialog";
@@ -38,23 +39,15 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
     <header className="sticky top-0 z-40 h-16 w-full border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex h-full max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
         <div className="flex shrink-0 items-center gap-3">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold shadow-sm transition-transform group-hover:scale-105">
-              <Store className="h-5 w-5" />
-            </div>
-            <div className={showNav ? "hidden sm:block" : undefined}>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-xl tracking-tight text-zinc-900 dark:text-zinc-100">
-                  Ichiba
-                </span>
-                <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 uppercase tracking-wider">
-                  POS
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:block">
-                Retail Store Billing
-              </p>
-            </div>
+          <Link href="/" className="flex items-center group" aria-label="Sekai Ichiba — Billing">
+            <Image
+              src="/ichiba-logo.png"
+              alt="Sekai Ichiba"
+              width={762}
+              height={346}
+              priority
+              className="h-10 w-auto select-none transition-transform group-hover:scale-105"
+            />
           </Link>
         </div>
 
@@ -147,12 +140,14 @@ export function NavbarSkeleton() {
   return (
     <header className="sticky top-0 z-40 h-16 w-full border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
       <div className="mx-auto flex h-full max-w-7xl items-center px-4 sm:px-6">
-        <div className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
-            <Store className="h-5 w-5" />
-          </div>
-          <span className="hidden font-extrabold text-xl tracking-tight text-zinc-900 sm:inline dark:text-zinc-100">Ichiba</span>
-        </div>
+        <Image
+          src="/ichiba-logo.png"
+          alt="Sekai Ichiba"
+          width={762}
+          height={346}
+          priority
+          className="h-10 w-auto select-none"
+        />
       </div>
     </header>
   );

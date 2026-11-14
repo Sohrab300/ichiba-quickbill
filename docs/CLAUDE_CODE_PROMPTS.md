@@ -297,6 +297,68 @@ one phone as MOB, all billing at the same time.
 
 ---
 
+## Prompt 8 — Sekai Ichiba brand theme
+
+```text
+Read AGENTS.md, docs/REQUIREMENTS.md section 15 (and 12), and LOOK at docs/ichiba-brand.png and
+public/ichiba-logo.png. Use the frontend-design skill if available. The current UI was scaffolded
+by another agent and looks like a generic AI/SaaS app: ~600 Tailwind `zinc-*` classes, ~100
+`emerald-*` classes and ~370 `dark:` overrides spread across every component. Re-skin the whole
+app in the Sekai Ichiba brand. This is a visual change only — do not change behaviour, data flow,
+server actions, keyboard shortcuts, focus handling, accessibility labels or the print receipt.
+
+1. Design tokens (src/app/globals.css, Tailwind v4 @theme): define semantic colours and use only
+   these in components —
+     paper #F7EDDF (page bg), paper-2 (a slightly darker cream for panels/table stripes),
+     surface #FFFFFF (cards, inputs, table), ink #1C1A1B (text, borders), ink-muted (secondary text,
+     must stay ≥ 4.5:1 on paper), brand #BE2C31 (primary), brand-hover (darker), brand-bright
+     #CA3530 (accents only), success (deep green), warning (mustard/amber), danger (use brand red
+     but always with an icon + text).
+   Also radius tokens, border width (2px default, 3px for primary buttons/cards), and a hard offset
+   shadow token (e.g. 3px 3px 0 ink) used instead of blurred shadows. Check every text/background
+   pair you use for WCAG AA contrast and list the ratios in your summary.
+2. Light theme only: remove every `dark:` class and any prefers-color-scheme handling; set
+   `color-scheme: light` so form controls don't turn dark.
+3. Typography with next/font/google: a bold rounded/geometric display face close to the
+   "Coming Soon" lettering in the reference (e.g. Righteous, Fredoka or similar — pick one and say
+   why) for page titles, the grand total, payment buttons and dialog titles; a clean, highly legible
+   sans for body (not Geist/Inter/Arial). `tabular-nums` on every amount, qty and invoice number.
+   Keep body text ≥ 15px on the billing screen.
+4. Shared UI primitives in src/components/ui/: Button (primary = brand fill + cream/white text +
+   ink border + hard shadow that "presses" on active; secondary = white + ink border; ghost; danger),
+   Card, Input/Select/Textarea (white, ink border, brand focus ring), Badge, Dialog shell, Table
+   styles, Alert (success/warning/danger/info with icons). Replace the ad-hoc class strings across
+   the app with these. Keep the existing custom select chevron rule in globals.css working (recolour
+   it to ink).
+5. Apply to every screen: Navbar (keep the logo, cream/ink bar with an ink bottom border, active
+   nav item as a red "sticker" tab), Login, Billing (left items table, right summary/total, Cash/UPI/
+   Card buttons — make them big brand buttons with their F7/F8/F9 hint; the Completed panel, sale
+   status/error panels and offline banner use the Alert styles), Products, Invoices list/detail,
+   Settings, all dialogs (Unknown code, Previous invoice, Printer settings, product add/edit),
+   camera scanner overlay, mobile bottom bar and menu, loading/empty states.
+6. Illustrations: draw 4–6 simple original line icons in the same style as the reference (ink
+   strokes, red fills: basket, noodle bowl, bubble tea, chopsticks, rice bag) as inline SVG
+   components in src/components/brand/. Use them sparingly: login page background pattern (low
+   opacity, not behind form fields) and the empty-cart state. Do not trace or copy the reference
+   artwork; draw new simple ones.
+7. PWA/browser icons are already done (favicon, apple-icon and manifest icons use the full logo
+   from public/ichiba-logo.png) — do not replace them. Only set the manifest theme_color /
+   background_color to the brand (paper #F7EDDF).
+8. Do not touch src/app/print.css or the receipt components except to make sure no theme colour
+   leaks into printing (receipts stay black on white).
+
+Afterwards: grep that no `zinc-`, `emerald-` or `dark:` classes remain in src/. Lint, typecheck,
+tests and build must pass. Take screenshots (headless browser at 1366×768 and 390×844) of login,
+billing with 3 items, billing completed state, invoices, products and settings, save them in
+docs/screenshots/, and tell me where they are. Do not commit.
+```
+
+**Check:** open `docs/screenshots/` and compare with `docs/ichiba-brand.png`. Then click through the
+app yourself: scan, pay, reprint, a dialog or two, and the phone view. Everything should still work
+exactly as before.
+
+---
+
 ## Tips for running these
 
 - If Claude Code proposes a plan first, read it. If it disagrees with REQUIREMENTS.md, fix the doc
