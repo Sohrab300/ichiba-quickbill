@@ -195,3 +195,23 @@ Cart move into a menu.
 
 **General:** light theme, high contrast, big touch targets (≥ 44px), rupee amounts right-aligned with
 `en-IN` formatting, success/error beeps on scan, focus returns to the scan box after every action.
+
+## 13. Decisions made during the build (prompt 3)
+
+- Rounding: an exact half paisa of taxable value rounds up; bill total rounds half-up to the rupee
+  (round-off between −₹0.49 and +₹0.50).
+- Limits: qty is a whole number 1–9,999 per product; max 500 lines per bill; repeated products merge
+  into one line in first-scanned order.
+- The database itself checks that the cashier bills only on the counter in their profile.
+- Re-sending an idempotency key returns the original invoice unchanged (checked before items); the same
+  key on a different counter is an error. Because of this, the cart is locked while status is unknown.
+- A sale waiting > 10 s on a lock fails cleanly ("try again"); the server action gives up after 20 s
+  and reports "status unknown".
+- Invoices also snapshot store phone, state, footer, counter code, cashier name, unit and MRP.
+- Sold products cannot be deleted (mark inactive instead). Invoices store the cashier's ID and name,
+  not a foreign key, so deleting a login never touches old invoices.
+- Sequences can never go backwards or be deleted; an admin may move one forward (e.g. to continue an
+  old paper series). Beyond 999,999 a sale fails cleanly.
+- Reprint of another counter's invoice shows "not found" for cashiers; admins without a counter can't bill.
+- Tooling: Node 24 (see `.nvmrc`). The concurrency test must never run against production once real
+  billing starts — use a Supabase branch or local stack.

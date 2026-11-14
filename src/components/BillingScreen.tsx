@@ -12,7 +12,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import { lookupProduct, completeSale } from "@/lib/actions";
+import { lookupProduct } from "@/lib/actions";
 import { formatINR } from "@/lib/format";
 import { playScanSuccessBeep, playScanErrorTone } from "@/lib/audio";
 import type { Product } from "@/lib/supabase/mappers";
@@ -106,7 +106,7 @@ export default function BillingScreen({
   const [bill, dispatch] = useReducer(billReducer, []);
   const [barcodeInput, setBarcodeInput] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
-  const [isCompletingSale, setIsCompletingSale] = useState(false);
+  const isCompletingSale = false;
 
   // Modals & Camera state
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -258,39 +258,17 @@ export default function BillingScreen({
   );
   const totalItemsCount = bill.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Complete sale handler
-  const handleCompleteSale = async () => {
+  // The server side of checkout is ready (completeSale() in src/lib/invoice-actions.ts). The
+  // checkout UI — Cash/UPI/Card buttons, one idempotency key per cart, the "status unknown" and
+  // retry states — comes with the billing screen rework (REQUIREMENTS.md sections 6 and 12), so
+  // this button stays disabled rather than recording every sale as cash.
+  const handleCompleteSale = () => {
     if (bill.length === 0) return;
-
-    setIsCompletingSale(true);
-    setStatusMessage(null);
-
-    try {
-      // Checkout is stubbed until invoice creation lands (prompt 3); this always fails.
-      const res = await completeSale();
-
-      if (res.success && res.data) {
-        playScanSuccessBeep();
-        setCompletedSaleModal({
-          saleId: res.data.saleId,
-          subtotal: subtotalPaise,
-          itemCount: totalItemsCount,
-        });
-        dispatch({ type: "CLEAR_BILL" });
-      } else {
-        playScanErrorTone();
-        setStatusMessage({
-          type: "error",
-          text: res.error || "Failed to record sale",
-        });
-      }
-    } catch (err: unknown) {
-      playScanErrorTone();
-      const msg = err instanceof Error ? err.message : "Error completing sale";
-      setStatusMessage({ type: "error", text: msg });
-    } finally {
-      setIsCompletingSale(false);
-    }
+    playScanErrorTone();
+    setStatusMessage({
+      type: "error",
+      text: "Checkout is not enabled on this screen yet (payment buttons come with the billing screen update).",
+    });
   };
 
   return (

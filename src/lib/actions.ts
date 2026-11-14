@@ -266,6 +266,10 @@ export async function deleteProduct(id: string): Promise<ActionResult<boolean>> 
     const productId = uuidSchema.parse(id);
     const supabase = createServerClient();
     const { error } = await supabase.from("products").delete().eq("id", productId);
+    if (error?.code === "23503") {
+      // invoice_items.product_id is ON DELETE RESTRICT: sold products stay for the invoice record.
+      return fail("This product appears on invoices, so it cannot be deleted. Mark it inactive instead.", 409);
+    }
     if (error) return dbError(error, "Failed to delete product");
     return { success: true, data: true, statusCode: 200 };
   } catch (err: unknown) {
@@ -316,21 +320,5 @@ export async function removeProductBarcode(barcodeId: string): Promise<ActionRes
     return { success: true, data: true, statusCode: 200 };
   } catch (err: unknown) {
     return fromException(err, "Failed to remove barcode");
-  }
-}
-
-/**
- * Checkout is disabled: the prototype's sales tables were dropped and invoice creation
- * (GST, invoice numbers, idempotency — REQUIREMENTS.md sections 3, 5, 6) replaces it in prompt 3.
- */
-export async function completeSale(): Promise<ActionResult<{ saleId: string }>> {
-  try {
-    await getStaffContext();
-    return fail(
-      "Checkout is disabled until invoice creation (GST and invoice numbers) is built.",
-      501
-    );
-  } catch (err: unknown) {
-    return fromException(err, "Failed to complete sale");
   }
 }

@@ -180,7 +180,13 @@ currently ~600 lines — split it into components and a cart reducer/hook while 
      would return the old invoice) — offer "Discard and start over" behind a confirm dialog that warns
      the sale may already exist.
 5. Scanning keeps working as before (keyboard wedge + camera), auto-focus returns to the scan input
-   after every action, beeps stay.
+   after every action, beeps stay. The scan input must not trigger browser/macOS password or address
+   autofill: autoComplete="off", no name/id that looks like a login field, type="text",
+   inputMode="text", spellCheck={false}. Also fix the camera restarting after every scan.
+   Use the completeSale / getInvoiceForReprint actions from src/lib/invoice-actions.ts and the
+   preview math in src/lib/gst.ts — don't reimplement them. Any server component that reads the
+   session must already go through getStaffContext (which calls connection()); don't add
+   Date.now()/new Date() to server-rendered code without it.
 6. Unknown barcode: cashier sees "Not found"; admin gets the option to link it to an existing product
    (search) or create a product.
 

@@ -72,6 +72,202 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_items: {
+        Row: {
+          cgst: number
+          gst_rate: number
+          hsn_code: string | null
+          id: string
+          invoice_id: string
+          item_code: string
+          line_no: number
+          line_total: number
+          mrp: number | null
+          name: string
+          product_id: string
+          qty: number
+          sgst: number
+          taxable_value: number
+          unit_price: number
+          uom: string
+        }
+        Insert: {
+          cgst: number
+          gst_rate: number
+          hsn_code?: string | null
+          id?: string
+          invoice_id: string
+          item_code: string
+          line_no: number
+          line_total: number
+          mrp?: number | null
+          name: string
+          product_id: string
+          qty: number
+          sgst: number
+          taxable_value: number
+          unit_price: number
+          uom: string
+        }
+        Update: {
+          cgst?: number
+          gst_rate?: number
+          hsn_code?: string | null
+          id?: string
+          invoice_id?: string
+          item_code?: string
+          line_no?: number
+          line_total?: number
+          mrp?: number | null
+          name?: string
+          product_id?: string
+          qty?: number
+          sgst?: number
+          taxable_value?: number
+          unit_price?: number
+          uom?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_sequences: {
+        Row: {
+          counter_id: string
+          fy: string
+          last_number: number
+          updated_at: string
+        }
+        Insert: {
+          counter_id: string
+          fy: string
+          last_number: number
+          updated_at?: string
+        }
+        Update: {
+          counter_id?: string
+          fy?: string
+          last_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_sequences_counter_id_fkey"
+            columns: ["counter_id"]
+            isOneToOne: false
+            referencedRelation: "counters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          cashier_name: string
+          cashier_user_id: string
+          cgst_total: number
+          counter_code: string
+          counter_id: string
+          created_at: string
+          fy: string
+          grand_total: number
+          id: string
+          idempotency_key: string
+          invoice_footer: string | null
+          invoice_no: string
+          item_count: number
+          payment_method: string
+          round_off: number
+          seq_number: number
+          sgst_total: number
+          store_address: string
+          store_gstin: string
+          store_legal_name: string
+          store_phone: string | null
+          store_state_code: string
+          store_state_name: string
+          subtotal: number
+          taxable_total: number
+          total_qty: number
+        }
+        Insert: {
+          cashier_name: string
+          cashier_user_id: string
+          cgst_total: number
+          counter_code: string
+          counter_id: string
+          created_at?: string
+          fy: string
+          grand_total: number
+          id?: string
+          idempotency_key: string
+          invoice_footer?: string | null
+          invoice_no: string
+          item_count: number
+          payment_method: string
+          round_off: number
+          seq_number: number
+          sgst_total: number
+          store_address: string
+          store_gstin: string
+          store_legal_name: string
+          store_phone?: string | null
+          store_state_code: string
+          store_state_name: string
+          subtotal: number
+          taxable_total: number
+          total_qty: number
+        }
+        Update: {
+          cashier_name?: string
+          cashier_user_id?: string
+          cgst_total?: number
+          counter_code?: string
+          counter_id?: string
+          created_at?: string
+          fy?: string
+          grand_total?: number
+          id?: string
+          idempotency_key?: string
+          invoice_footer?: string | null
+          invoice_no?: string
+          item_count?: number
+          payment_method?: string
+          round_off?: number
+          seq_number?: number
+          sgst_total?: number
+          store_address?: string
+          store_gstin?: string
+          store_legal_name?: string
+          store_phone?: string | null
+          store_state_code?: string
+          store_state_name?: string
+          subtotal?: number
+          taxable_total?: number
+          total_qty?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_counter_id_fkey"
+            columns: ["counter_id"]
+            isOneToOne: false
+            referencedRelation: "counters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_barcodes: {
         Row: {
           barcode: string
@@ -240,6 +436,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_invoice: {
+        Args: {
+          p_cashier_user_id: string
+          p_counter_id: string
+          p_idempotency_key: string
+          p_items: Json
+          p_payment_method: string
+        }
+        Returns: Json
+      }
+      get_invoice: { Args: { p_invoice_id: string }; Returns: Json }
+      invoice_json: { Args: { p_invoice_id: string }; Returns: Json }
       lookup_product: {
         Args: { p_code: string }
         Returns: {
