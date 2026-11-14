@@ -199,10 +199,15 @@ export function ScanBar({
           onClick={onOpenCamera}
           disabled={!!lockedReason}
           aria-label="Scan with camera"
-          className="flex h-14 min-w-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 font-semibold text-white hover:bg-zinc-800 disabled:opacity-40 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+          // Phones: the camera is the main way to scan, so it comes first and stands out.
+          // Desktop: keyboard-wedge scanners type into the box; the camera is a fallback.
+          className="order-first flex h-14 min-w-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 text-lg font-bold text-white active:bg-emerald-900 disabled:opacity-40 lg:order-none lg:bg-zinc-900 lg:px-4 lg:text-base lg:font-semibold lg:hover:bg-zinc-800 dark:lg:bg-zinc-700 dark:lg:hover:bg-zinc-600"
         >
           <Camera className="h-6 w-6" aria-hidden />
-          <span className="hidden xl:inline">Camera</span>
+          <span className="lg:hidden xl:inline">
+            <span className="lg:hidden">Scan</span>
+            <span className="hidden xl:inline">Camera</span>
+          </span>
         </button>
       </div>
 

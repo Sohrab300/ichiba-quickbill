@@ -1,161 +1,176 @@
-# Ichiba POS 🏪
+# Ichiba QuickBill
 
-A simple, fast, barcode-scanning billing web application built for the **Ichiba** retail store. Designed for supermarket and retail workers operating on mobile phones, tablets, or laptops with physical barcode scanners or built-in device cameras.
+Billing for the Ichiba store: three Windows billing counters (**CL1**, **CL2**, **CL3**) and phones
+(**MOB**) billing at the same time against one Supabase database. GST tax invoices with
+per-counter numbering (`CL1/26-27/000001`), receipt printing, invoice history and daily CSV exports.
 
----
+What it must do, and every decision made along the way: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-## ⚡ Tech Stack
+- **Billing (`/`)** — scan with a USB/Bluetooth scanner or the phone camera, or search by name;
+  live GST preview; Cash / UPI / Card completes the sale and prints a customer + store copy.
+  Phones get a camera-first layout with payment toggles and one Complete button.
+- **Invoices (`/invoices`)** — history by IST day and counter, day totals, detail, reprint.
+  Admins: CSV exports ([docs/EXPORTS.md](docs/EXPORTS.md)).
+- **Products (`/products`)** and **Settings (`/settings`)** — admin only.
+- **Installable app (PWA)** on phones and desktops. No offline mode: a sale needs the server, and
+  a red "You're offline — sale can't be completed" banner says so.
 
-- **Framework**: Next.js 16 (App Router, Turbopack, TypeScript)
-- **Styling**: Tailwind CSS
-- **Database & Backend**: [Supabase](https://supabase.com) (Hosted PostgreSQL with Row Level Security and Atomic RPC Transactions)
-- **Data Access**: `@supabase/supabase-js` + `@supabase/ssr` (strictly server-side, no ORM)
-- **Validation**: Zod
-- **Barcode & QR Scanning**: `html5-qrcode` (device camera) + Keyboard wedge listener (USB & Bluetooth handheld scanners)
-- **Audio Feedback**: Web Audio API (synthesized crisp supermarket scan beeps and error buzzers)
+## Stack
 
----
+Next.js 16 (App Router, Server Actions, `proxy.ts`), React 19, Tailwind CSS 4, Supabase
+(Postgres + Auth) via `@supabase/supabase-js` and `@supabase/ssr`, Zod, `html5-qrcode`, Vitest.
+Node 24 (`.nvmrc`).
 
-## 🚀 Key Features
+## How it is secured
 
-1. **High-Speed Billing Screen (`/`)**:
-   - **Always-Focused Scan Input**: Automatically captures scans from USB/Bluetooth handheld barcode scanners (which send digits followed by `Enter`). Auto-refocuses after every scan and user interaction.
-   - **Camera Barcode Scanner**: Toggle camera scanning powered by `html5-qrcode` with environment lens selection. Includes a toggle for **Continuous Scanning** (scan multiple items without closing) or **Single Scan**.
-   - **Catalog Lookup & Live Cart**: Instant lookup by barcode. Existing items automatically increment in quantity.
-   - **Quick Add Modal**: If a scanned barcode does not exist in the database, a prefilled modal appears instantly to save the product and add it to the active bill without disrupting workflow.
-   - **Live Sticky Subtotal**: Live calculation formatted in Indian Rupees (**₹ INR**, `en-IN`), with quantity direct edits, increment/decrement buttons, and line item removal.
-   - **Atomic Transaction Sale Completion**: The `Complete Sale` action calls the Postgres function `complete_sale(items)`, snapshotting actual current product names and DB prices to compute the exact subtotal server-side.
-   - **Audio & Visual Feedback**: Distinct synthesized success beep and error tone/visual flashes on scan events.
+- **Login everywhere.** Supabase Auth, email + password. `src/proxy.ts` refreshes the session and
+  sends signed-out visitors to `/login`. Every Server Action and Route Handler calls
+  `getStaffContext()` (`src/lib/auth.ts`) first, which derives the user, role and **counter** from
+  the session and `staff_profiles` — the browser never chooses the counter. A test
+  (`src/lib/server-actions-auth.test.ts`) fails if an action skips the check.
+- **The browser never talks to the database.** All data goes through the server with the secret
+  key (`src/lib/supabase/server.ts`, guarded by `server-only`). Every table has RLS on with no
+  policies, `anon`/`authenticated` have no table privileges, and every RPC is executable only by
+  `service_role`. Check with `npm run db:audit`.
+- **Invoices are created in one database transaction** (`create_invoice`), priced from the
+  database, numbered per counter without gaps, idempotent on a key the cart carries (a double
+  click or a retry can't create a second invoice), and immutable once issued.
 
-2. **Product Catalog (`/products`)**:
-   - Manage your store's inventory: list, search (by name, barcode, or category), create, edit, and delete products.
-   - Prices stored as integer **paise** to eliminate floating-point currency errors.
+## Environment variables
 
-3. **Invoice History (`/invoices`)**:
-   - Server-paginated list by IST date, counter and invoice number, with day totals (taxable, CGST, SGST, grand total, per payment method). Cashiers see today's invoices of their own counter.
-   - Detail view with every line and the HSN/GST summary, plus Reprint (fetched from Supabase, marked REPRINT).
-   - Admin CSV exports (UTF-8 with BOM for Excel): `/api/exports/daily-summary?date=YYYY-MM-DD[&counter=CL1]` (one row per invoice) and `/api/exports/daily-lines?…` (one row per line). Opening them in Excel without losing leading zeros: [docs/EXPORTS.md](docs/EXPORTS.md).
+| Variable | Where | What |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | server + proxy | Project URL, `https://<ref>.supabase.co` (Project Settings → API). |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | server + proxy | Publishable key `sb_publishable_…`. Only used for sign-in and session refresh. |
+| `SUPABASE_SERVICE_ROLE_KEY` | **server only** | Secret key `sb_secret_…` (or the legacy `service_role` JWT). Bypasses RLS. Never prefix it with `NEXT_PUBLIC_`, never commit it. |
 
-4. **Settings (`/settings`, admin)**: store header, FY label, counter invoice prefixes and print widths. Issued invoices never change.
+Locally: `cp .env.example .env.local` and fill it in. The scripts in `scripts/` read `.env.local` too.
 
----
+## Setup
 
-## 🔐 Supabase Architecture & Security
+### 1. Supabase project
 
-- **Login required everywhere**: Supabase Auth (email + password). `src/proxy.ts` refreshes the session cookie and sends signed-out visitors to `/login`. Every Server Action calls `getStaffContext()` (`src/lib/auth.ts`) first, which derives the user, role and **counter** from the session + `staff_profiles` — a counter id from the browser is never accepted. Product create/edit/delete and barcode linking need role `admin`.
-- **Two Supabase clients**: a cookie-based client with the publishable key (`src/lib/supabase/session.ts`) only reads/refreshes the session; all data access uses the server-only secret-key client (`src/lib/supabase/server.ts`).
-- **Row Level Security (RLS)**: Enabled across `products`, `sales`, and `sale_items`. No public access policies are granted, meaning the public `anon` key cannot read or alter store data.
-- **Server-Only Service Role Client**: Database access is performed exclusively on the server in `src/lib/supabase/server.ts` guarded by `import "server-only"`. The `SUPABASE_SERVICE_ROLE_KEY` is never sent or exposed to client browsers.
-- **Atomic `complete_sale` RPC**: Executes inside a single PostgreSQL transaction. Product prices and names are retrieved directly from the database (not trusted from client payloads). Execution is revoked from `anon`/`authenticated` and granted strictly to `service_role`.
+Create a project at [supabase.com/dashboard](https://supabase.com/dashboard). Pick the region
+closest to the store (the current project is in **Singapore, `ap-southeast-1`**) — the Vercel
+functions must run in the same region (see Deployment).
 
----
+Then in the dashboard:
 
-## 🛠️ Supabase Setup Guide
+- **Authentication → Sign In / Providers → Email**: turn **off** "Allow new users to sign up".
+  Logins are created only with `npm run staff:create`.
+- **Authentication → Attack Protection** (older dashboards: Providers → Email): turn on
+  **Prevent use of leaked passwords** if your plan includes it (Pro and up). `staff:create` then
+  rejects passwords known from breaches.
+- **Authentication → URL Configuration → Site URL**: your production URL (e.g.
+  `https://quickbill.vercel.app`).
 
-Follow these steps to set up your hosted Supabase Postgres database:
+### 2. Database migrations
 
-### 1. Create a Supabase Project
-1. Log into your account at [supabase.com/dashboard](https://supabase.com/dashboard).
-2. Click **New Project**, select your organization, choose a project name (e.g., `ichiba-pos`), set a secure database password, and select a region close to your store.
-
-### 2. Retrieve API Credentials
-In your Supabase project dashboard:
-1. Navigate to **Project Settings** (gear icon) -> **API**.
-2. Copy the **Project URL** (e.g. `https://xyzcompany.supabase.co`).
-3. Under **API Keys**, copy the **publishable** key (`sb_publishable_...`) and the `service_role` / secret key (click "Reveal").
-   > ⚠️ **IMPORTANT**: `service_role` has admin privileges and bypasses RLS. Keep it secret. Never commit it to git or prefix it with `NEXT_PUBLIC_`.
-4. Under **Authentication → Sign In / Providers**, turn **off** "Allow new users to sign up". Staff logins are created with `npm run staff:create` only.
-
-### 3. Configure Local Environment
-Create your local environment file:
 ```bash
-cp .env.example .env.local
-```
-Fill in the values in `.env.local`:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-```
-Add the same three variables in Vercel → Settings → Environment Variables.
-
-### 4. Link Project & Push Migrations
-Authenticate the Supabase CLI and link your hosted project:
-```bash
-# Login to Supabase CLI (opens browser authentication)
+npm install
 npx supabase login
-
-# Link your local repository to your remote project (find your Project Reference ID in Project Settings -> General)
-npx supabase link --project-ref <your-project-ref>
-
-# Apply the database migration (creates tables, indexes, RLS, and complete_sale RPC)
-npx supabase db push
+npx supabase link --project-ref <project-ref>   # Project Settings → General
+npx supabase db push                            # applies supabase/migrations/*
+npm run db:audit                                # read-only check; no rows = pass
 ```
 
-### 5. Seed Initial Products
-You can seed ~10 realistic retail products with valid EAN-13 barcodes into your database:
+| Migration | What it adds |
+| --- | --- |
+| `20261114000000_init_ichiba_pos` | First prototype (kept for migration history; removed by the next one). |
+| `20261114120000_products_catalog` | `products`, `product_barcodes`, `store_settings`, `lookup_product()`. |
+| `20261114200000_counters_staff` | `counters` (CL1, CL2, CL3, MOB) and `staff_profiles`. |
+| `20261114230000_invoices` | `invoices`, `invoice_items`, `invoice_sequences`, `create_invoice()`, `get_invoice()`. |
+| `20261115100000_invoice_history` | Day totals and CSV export functions, counter prefix guard. |
+| `20261115200000_harden_privileges` | Revokes leftover API-role privileges, stops default grants to `anon`/`authenticated`, and asserts the security rules (fails if any are broken). |
 
-**Option A (Supabase CLI)**:
+After a schema change, regenerate the types:
+`npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts`.
+
+### 3. Import products
+
+Export **Current Stock Detail** as CSV and save it as `data/stock.csv` (`data/` is git-ignored: the
+file contains purchase prices).
+
 ```bash
-npx supabase db push --include-seed
+npm run import:products -- --dry-run --with-ean   # compare only; writes data/import-report.csv
+npm run import:products -- --with-ean             # upsert on item_code + link manufacturer EANs
 ```
 
-**Option B (Supabase Dashboard SQL Editor)**:
-1. Open **SQL Editor** in the Supabase Dashboard.
-2. Open `supabase/seed.sql` in this repo, copy its contents, and paste into the query editor.
-3. Click **Run**.
+Review `data/import-report.csv` (price conflicts between batches, GST mismatches, skipped
+barcodes). Re-running is safe: it updates imported fields of matching item codes and never touches
+products that are not in the CSV — but it does overwrite price/GST/name edits made in the app.
 
-### 6. Create Staff Logins
-Counters `CL1`, `CL2`, `CL3` (desk) and `MOB` (mobile) are created by the migration. Create one login per counter PC, mobile cashier logins on `MOB`, and an admin:
+### 4. Staff logins
+
+One login per counter PC, one or more for phones (all on `MOB`), and an admin. Emails don't need
+to be real mailboxes; no email is ever sent.
+
 ```bash
 npm run staff:create -- --email cl1@ichiba.local --password '<password>' --name "Counter 1" --role cashier --counter CL1
+npm run staff:create -- --email cl2@ichiba.local --password '<password>' --name "Counter 2" --role cashier --counter CL2
+npm run staff:create -- --email cl3@ichiba.local --password '<password>' --name "Counter 3" --role cashier --counter CL3
+npm run staff:create -- --email mob1@ichiba.local --password '<password>' --name "Phone 1" --role cashier --counter MOB
 npm run staff:create -- --email admin@ichiba.local --password '<password>' --name "Store Admin" --role admin
 ```
-`--counter` is required for cashiers and optional for admins. To lock a login out, set `staff_profiles.is_active = false`.
 
-### 7. (Optional) Regenerating TypeScript Database Types
-Whenever you update your database schema in Supabase, you can regenerate `database.types.ts`:
-```bash
-npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
-```
+- The counter (and so the invoice series) comes from the login, not the device: a phone signed in
+  as `cl1@…` bills on CL1. Give phones `MOB` logins.
+- An admin without `--counter` can manage products and settings but cannot bill.
+- **Lock a login out at once:** Table Editor → `staff_profiles` → set `is_active` to `false`.
+- **New password:** delete the user in Authentication → Users and create it again with
+  `staff:create`. Old invoices keep the cashier's name; nothing else references the login.
 
----
-
-## 💻 Running the Application
-
-Ensure Node.js (>= 20) is installed, then run:
+### 5. Run locally
 
 ```bash
-# Install dependencies
-npm install
-
-# Start local development server
-npm run dev
+npm run dev     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Phone cameras only work on HTTPS (or `localhost`), so test phones against a Vercel preview
+deployment rather than the laptop's LAN address.
 
----
+## Deployment (Vercel)
 
-## 📷 Scanner Usage Guide
+1. Import the repository in Vercel (framework: Next.js).
+2. **Settings → Build and Deployment → Node.js Version: 24.x.**
+3. **Settings → Environment Variables:** add the three variables above for Production (and
+   Preview, if previews should work). Redeploy after changing them.
+4. **Region:** `vercel.json` pins the functions to `sin1` (Singapore), next to the database. Each
+   scan is one server action making 2–3 database calls, so a function on another continent adds
+   hundreds of milliseconds per scan. If the Supabase project is in another region, change
+   `regions` to the matching Vercel region.
+5. Apply the database migrations (step 2 of Setup) **before** deploying code that needs them.
+6. Check: sign in, `npm run db:audit` (no rows), then run [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md).
 
-### Hardware Barcode Scanners (USB / Bluetooth)
-- Any standard barcode scanner operates in **keyboard wedge** mode.
-- When an item is scanned, the scanner types the barcode digits and emits an `Enter` keystroke.
-- The Billing page keeps the barcode input permanently focused. Simply point and shoot!
+Install the app:
 
-### Camera Barcode Scanning
-- Click the **"Scan with Camera"** button on the billing bar.
-- Allow camera permissions when prompted.
-- Position the product barcode within the viewfinder box.
-- Check the **"Continuous scanning"** box to scan multiple items in sequence without the camera closing.
-- > 🔒 **Note on Camera Permissions**: Modern web browsers restrict camera access (`getUserMedia`) to secure contexts (**HTTPS** or **`http://localhost`**). If running on a local network for testing on a phone, use localhost or an HTTPS tunnel (such as ngrok or Cloudflare Tunnel).
+- **Counter PCs (Chrome/Edge):** the install icon at the right end of the address bar.
+  Printer setup: [docs/PRINTER_SETUP.md](docs/PRINTER_SETUP.md).
+- **Android (Chrome):** ⋮ → Add to Home screen → Install.
+- **iPhone (Safari):** Share → Add to Home Screen.
 
----
+## Scripts
 
-## 🔮 Future Ideas & Roadmap
+| Command | What |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Next.js. |
+| `npm run lint` | ESLint. |
+| `npm test` | Unit tests (GST maths, cart, CSV, connectivity, server-action auth, sale completion). |
+| `npm run db:audit` | Read-only: RLS on every table, no API-role privileges, RPCs `service_role` only. No rows = pass. |
+| `npm run db:explain` | Read-only: EXPLAIN of the scan lookup (must use indexes), name search, and round-trip timing. Add `-- --local` for a local stack. |
+| `npm run import:products` | Product import (see above). |
+| `npm run staff:create` | Create a staff login (see above). |
+| `npm run test:concurrency` | Parallel sales on CL1–CL3 + same-key retries. **Creates real, undeletable invoices: never run it on the live project** — use `npx supabase start` or a Supabase branch. |
 
-- **GST / Tax Breakdown**: Configure GST rates (5%, 12%, 18%) per product category with CGST/SGST line receipts.
-- **ESC/POS Thermal Receipt Printing**: Direct Bluetooth or WebUSB thermal receipt printer integration.
-- **Inventory & Low Stock Alerts**: Decrement stock quantities on sale completion with low stock warnings.
-- **Offline PWA / Sync**: Local caching with background synchronization when internet connectivity drops.
+## Project layout
+
+```
+src/app/               routes: / (billing), /invoices, /products, /settings, /login,
+                       /api/exports/*, manifest.ts, icons
+src/components/        UI; billing/ is the billing screen, print/ the receipt
+src/lib/               server actions (*-actions.ts), auth, GST, cart, CSV, Supabase clients
+src/proxy.ts           session refresh + login redirect
+supabase/migrations/   database schema, functions and privileges
+scripts/               product import, staff logins, DB checks, concurrency test
+docs/                  requirements, printer setup, exports, launch checklist
+```

@@ -10,6 +10,13 @@ interface CameraScannerProps {
   onScan: (decodedText: string) => void;
   continuous: boolean;
   onToggleContinuous: (enabled: boolean) => void;
+  /**
+   * Result of the last scan (added / not found), shown over the viewfinder: on a phone the
+   * camera covers the scan bar where this message normally appears.
+   */
+  feedback?: { tone: "success" | "error" | "info"; text: string } | null;
+  /** Running bill total, e.g. "₹1,240.00 · 6 qty". */
+  summary?: string;
 }
 
 export function CameraScanner({
@@ -18,6 +25,8 @@ export function CameraScanner({
   onScan,
   continuous,
   onToggleContinuous,
+  feedback = null,
+  summary,
 }: CameraScannerProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastScanned, setLastScanned] = useState<string | null>(null);
@@ -122,10 +131,13 @@ export function CameraScanner({
             <span className="font-semibold text-sm">Scan Barcode</span>
           </div>
 
+          {summary && <span className="ml-auto mr-2 text-sm font-bold tabular-nums text-zinc-100">{summary}</span>}
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
             title="Close camera"
+            aria-label="Close camera"
           >
             <X className="h-5 w-5" />
           </button>
@@ -163,9 +175,20 @@ export function CameraScanner({
           )}
 
           {lastScanned && continuous && (
-            <div className="absolute bottom-3 left-4 right-4 bg-emerald-900/90 border border-emerald-500/50 rounded-xl px-3 py-2 flex items-center gap-2 text-xs text-emerald-200 animate-fade-in shadow-lg">
-              <Check className="h-4 w-4 text-emerald-400 shrink-0" />
-              <span className="truncate">Scanned: {lastScanned}</span>
+            <div
+              role="status"
+              className={`absolute bottom-3 left-4 right-4 rounded-xl border px-3 py-2 flex items-center gap-2 text-sm font-medium shadow-lg ${
+                feedback?.tone === "error"
+                  ? "bg-red-950/90 border-red-500/60 text-red-100"
+                  : "bg-emerald-900/90 border-emerald-500/50 text-emerald-100"
+              }`}
+            >
+              {feedback?.tone === "error" ? (
+                <AlertCircle className="h-4 w-4 text-red-300 shrink-0" />
+              ) : (
+                <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+              )}
+              <span className="truncate">{feedback?.text ?? `Scanned: ${lastScanned}`}</span>
             </div>
           )}
         </div>

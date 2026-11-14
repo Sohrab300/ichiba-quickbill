@@ -28,16 +28,3 @@ export function paiseToRupeesInput(paise: number | null | undefined): string {
   if (paise === null || paise === undefined) return "";
   return (paise / 100).toFixed(2);
 }
-
-/**
- * Formats ISO date string into human readable Indian standard format (always IST).
- */
-export function formatDateTime(isoString: string): string {
-  if (!isoString) return "-";
-  const date = new Date(isoString);
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Kolkata",
-  }).format(date);
-}

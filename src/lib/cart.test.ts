@@ -101,6 +101,11 @@ describe("cartReducer", () => {
     expect(cartReducer(sent, { type: "replace", cart: other })).toBe(other);
   });
 
+  it("ignores a second Complete press while the first is pending (same key, same method)", () => {
+    const first = cartReducer(cartWith(soap), { type: "saleSent", paymentMethod: "cash" });
+    expect(cartReducer(first, { type: "saleSent", paymentMethod: "upi" })).toBe(first);
+  });
+
   it("does not send an empty cart", () => {
     const empty = newCart(KEY);
     expect(cartReducer(empty, { type: "saleSent", paymentMethod: "cash" })).toBe(empty);

@@ -148,6 +148,9 @@ imported fields for matching item codes; products not in the CSV are never touch
 - Responsive billing screen; camera scanning via existing `html5-qrcode`.
 - Installable PWA (manifest + icons). No offline caching of data or invoices.
 - Mobile users use the MOB sequence; printing uses whatever the phone offers (system print/share PDF).
+- No service worker. A red "You're offline — sale can't be completed" banner shows while
+  `navigator.onLine` is false or after a request to the server failed (cleared by the next
+  successful request or a 5 s probe). See section 14.
 
 ## 11. Non-functional
 
@@ -189,9 +192,10 @@ is a two-pane screen that fits 1366×768 without page scrolling:
 - Sale-status-unknown and error states from section 6 appear in the right pane, above the payment
   buttons.
 
-**Mobile (< 1024px):** single column — scan box (with camera button), item list as cards, then a
-sticky bottom bar with the total and the three payment buttons; Print Previous Invoice and Clear
-Cart move into a menu.
+**Mobile (< 1024px):** single column — camera button first, then the scan box; item list as
+cards; then a sticky bottom bar with the total, the payment method as three large toggles (Cash /
+UPI / Card) and one **Complete** button (see section 14). Print Previous Invoice and Clear Cart move
+into a menu.
 
 **General:** light theme, high contrast, big touch targets (≥ 44px), rupee amounts right-aligned with
 `en-IN` formatting, success/error beeps on scan, focus returns to the scan box after every action.
@@ -215,3 +219,24 @@ Cart move into a menu.
 - Reprint of another counter's invoice shows "not found" for cashiers; admins without a counter can't bill.
 - Tooling: Node 24 (see `.nvmrc`). The concurrency test must never run against production once real
   billing starts — use a Supabase branch or local stack.
+
+## 14. Decisions made before launch (prompt 7)
+
+- **Phones: toggle + Complete.** Below 1024px the payment method is a toggle and a separate
+  Complete button finishes the sale (two taps), so the method is a deliberate choice on a touch
+  screen. No method is preselected, and the choice resets after every sale. Desktop keeps the
+  one-press Cash/UPI/Card buttons with F7/F8/F9.
+- **Phones: print on tap.** On a MOB login or any touch-only device the print dialog does not open
+  by itself after a sale; the Completed panel shows **Print / PDF**, which calls
+  `window.print()` straight from the tap (phone browsers may ignore a print not started by a tap).
+  The document is the same as on desktop (customer + store copy); later taps are reprints.
+- **Offline.** While the device is offline the payment buttons are disabled and a sale is never
+  sent; a sale that could not be sent is a plain error, never "status unknown". A request that
+  fails without an answer still means "status unknown" (section 6).
+- **Hosting region.** Vercel functions run in the Supabase project's region (`vercel.json`,
+  `sin1` for `ap-southeast-1`): every scan is a server action with 2–3 database calls.
+- **Database privileges.** `anon` / `authenticated` get no default privileges on new tables,
+  sequences or functions in `public`; the hardening migration asserts RLS on every table and
+  `service_role`-only EXECUTE. `npm run db:audit` re-checks it.
+- **Mobile sequence.** The counter comes from the login's staff profile, not the device: a phone
+  bills on MOB because its login is a MOB login (create phones' logins with `--counter MOB`).

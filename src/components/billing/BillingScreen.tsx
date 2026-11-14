@@ -8,6 +8,8 @@ import { addBlockedReason, cartReducer, newIdempotencyKey, saveCart, toSaleItems
 import { computeInvoiceTotals } from "@/lib/gst";
 import { formatINR } from "@/lib/format";
 import { playScanErrorTone, playScanSuccessBeep } from "@/lib/audio";
+import { isBrowserOffline, reportRequestFailed, reportRequestSucceeded } from "@/lib/connectivity";
+import { useConnectivity } from "@/components/ConnectionBanner";
 import { printInvoice } from "@/components/print/print";
 import { resolvePrintWidth, type PrintWidth } from "@/lib/print-settings";
 import type { Invoice } from "@/lib/invoice";
@@ -19,7 +21,7 @@ import { useCart } from "./useCart";
 import { ScanBar, type ScanStatus } from "./ScanBar";
 import { CartTable } from "./CartTable";
 import { CheckoutPanel } from "./CheckoutPanel";
-import { PaymentButtons, PAYMENT_OPTIONS } from "./PaymentButtons";
+import { MobilePayment, PaymentButtons, PAYMENT_OPTIONS } from "./PaymentButtons";
 import { SaleStatusPanel, type SaleStatus } from "./SaleStatusPanel";
 import { UnknownCodeDialog } from "./UnknownCodeDialog";
 import { ConfirmDialog } from "./Modal";
@@ -33,6 +35,8 @@ interface BillingScreenProps {
   isAdmin: boolean;
   /** null: this login has no counter and cannot complete sales. */
   counterCode: string | null;
+  /** counters.kind: "mobile" (MOB) prints through the phone's own dialog, on a tap. */
+  counterKind: "desk" | "mobile" | null;
   /** counters.print_width_mm; this device may override it (Printer settings). */
   printWidthMm: PrintWidth | null;
 }
@@ -80,8 +84,9 @@ function isTouchOnly(): boolean {
 
 const PRINT_FAILED_HINT = "The sale is saved — use Reprint to try again.";
 
-export default function BillingScreen({ userId, isAdmin, counterCode, printWidthMm }: BillingScreenProps) {
+export default function BillingScreen({ userId, isAdmin, counterCode, counterKind, printWidthMm }: BillingScreenProps) {
   const canBill = counterCode !== null;
+  const offline = useConnectivity() === "offline";
   const { cart, dispatch, cartRef, hydrated } = useCart(userId);
   const totals = useMemo(() => computeInvoiceTotals(cart.items).totals, [cart.items]);
 
@@ -92,6 +97,10 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
   const [unknownDetail, setUnknownDetail] = useState<string | null>(null);
   const [completed, setCompleted] = useState<Invoice | null>(null);
   const [reprint, setReprint] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  /** Phones: the completed invoice has not been printed yet (no automatic print dialog there). */
+  const [printPending, setPrintPending] = useState(false);
+  /** Phones: payment method toggled on, completed with the Complete button. Reset after each sale. */
+  const [mobileMethod, setMobileMethod] = useState<PaymentMethod | null>(null);
 
   // Scanning
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
@@ -200,8 +209,10 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
     let res: Awaited<ReturnType<typeof lookupProduct>> | null = null;
     try {
       res = await lookupProduct(code);
+      reportRequestSucceeded();
     } catch {
       res = null;
+      reportRequestFailed();
     } finally {
       setLookups((n) => n - 1);
     }
@@ -226,6 +237,18 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
     if (submittingRef.current || !hydrated || !canBill) return;
     const current = cartRef.current;
     if (current.items.length === 0) return;
+    if (isBrowserOffline()) {
+      // Nothing is sent, so nothing can be saved: the cart stays as it is (never "status unknown").
+      setScanStatus({
+        tone: "error",
+        text: current.pendingSale
+          ? "You're offline — use Check status again when the connection is back."
+          : "You're offline — the sale was not sent. Complete it when the connection is back.",
+      });
+      playScanErrorTone();
+      focusScan();
+      return;
+    }
 
     // Re-sending the key of a sale whose outcome is unknown ("Check status"): same key, same
     // items, same payment method. Never a new key, never automatically.
@@ -251,6 +274,8 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
     } catch {
       result = null; // network error / timeout: we cannot know whether it was saved
     }
+    if (result === null) reportRequestFailed();
+    else reportRequestSucceeded();
     submittingRef.current = false;
     setSubmitting(null);
 
@@ -260,12 +285,19 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
       setUnknownDetail(null);
       setCompleted(invoice);
       setReprint({ busy: false, error: null });
+      setMobileMethod(null);
       playScanSuccessBeep();
-      // After the Completed panel paints. Printing never affects the sale: a cancelled or failed
-      // print leaves the invoice as it is, and Reprint prints it again.
-      void printInvoice(invoice, { widthMm: resolvePrintWidth(printWidthMm) }).then((printed) => {
-        if (!printed.ok) setReprint({ busy: false, error: `${printed.error} ${PRINT_FAILED_HINT}` });
-      });
+      // Phones (MOB, or any touch-only device): no automatic dialog — the cashier taps
+      // "Print / PDF" (window.print() from the tap), which lets the phone print or save a PDF.
+      const phone = counterKind === "mobile" || isTouchOnly();
+      setPrintPending(phone);
+      if (!phone) {
+        // After the Completed panel paints. Printing never affects the sale: a cancelled or failed
+        // print leaves the invoice as it is, and Reprint prints it again.
+        void printInvoice(invoice, { widthMm: resolvePrintWidth(printWidthMm) }).then((printed) => {
+          if (!printed.ok) setReprint({ busy: false, error: `${printed.error} ${PRINT_FAILED_HINT}` });
+        });
+      }
     } else if (!result || result.statusUnknown) {
       setUnknownDetail(result?.error ?? "No answer from the server (connection lost or timed out).");
       playScanErrorTone();
@@ -283,8 +315,16 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
     focusScan();
   };
 
-  const reprintCompleted = async () => {
+  const printCompleted = async () => {
     if (!completed) return;
+    if (printPending) {
+      // First print on a phone: the invoice the server just returned, with no await before
+      // window.print() so the tap still counts as a user gesture.
+      setPrintPending(false);
+      const printed = await printInvoice(completed, { widthMm: resolvePrintWidth(printWidthMm), immediate: true });
+      setReprint({ busy: false, error: printed.ok ? null : `${printed.error} ${PRINT_FAILED_HINT}` });
+      return;
+    }
     setReprint({ busy: true, error: null });
     try {
       const res = await getInvoiceForReprint(completed.id);
@@ -316,7 +356,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
           : { kind: "idle" };
 
   const locked = submitting !== null || cart.pendingSale;
-  const payDisabled = !hydrated || !canBill || cart.items.length === 0 || locked;
+  const payDisabled = !hydrated || !canBill || cart.items.length === 0 || locked || offline;
   const lockedReason = !hydrated
     ? "Loading…"
     : submitting
@@ -363,7 +403,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
     "flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-zinc-300 bg-white px-4 font-semibold text-zinc-800 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 lg:h-[calc(100dvh-4rem)] lg:flex-none lg:flex-row lg:overflow-hidden dark:bg-zinc-950">
+    <div className="flex flex-1 flex-col bg-zinc-50 lg:h-[calc(100dvh-4rem-var(--connection-banner-h,0rem))] lg:flex-none lg:flex-row lg:overflow-hidden dark:bg-zinc-950">
       {/* Left: scan + items */}
       <section aria-label="Items" className="flex flex-1 flex-col lg:min-h-0 lg:min-w-0">
         <div className="sticky top-16 z-20 border-b-2 border-zinc-200 bg-zinc-50 px-3 pt-3 lg:static dark:border-zinc-800 dark:bg-zinc-950">
@@ -444,10 +484,12 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
               focusScan();
             }}
             onDiscard={() => setConfirm("discard")}
-            onReprint={() => void reprintCompleted()}
+            onReprint={() => void printCompleted()}
             reprint={reprint}
+            printLabel={printPending ? "Print / PDF" : "Reprint"}
             onNewBill={() => {
               setCompleted(null);
+              setPrintPending(false);
               setScanStatus(null);
               focusScan();
             }}
@@ -458,6 +500,20 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
             disabled={payDisabled}
             busyMethod={submitting && !submitting.recheck ? submitting.paymentMethod : null}
             onPay={(method) => void submitSale(method)}
+          />
+        }
+        mobilePayment={
+          <MobilePayment
+            selected={mobileMethod}
+            onSelect={setMobileMethod}
+            onComplete={() => {
+              if (mobileMethod) void submitSale(mobileMethod);
+            }}
+            disabled={!hydrated || !canBill || locked}
+            empty={cart.items.length === 0}
+            busy={submitting !== null && !submitting.recheck}
+            offline={offline}
+            total={totals.grandTotal}
           />
         }
         mobileActions={
@@ -497,6 +553,8 @@ export default function BillingScreen({ userId, isAdmin, counterCode, printWidth
           onScan={enqueueScan}
           continuous={continuousScan}
           onToggleContinuous={setContinuousScan}
+          feedback={scanStatus}
+          summary={`${formatINR(totals.grandTotal)} · ${totals.totalQty} qty`}
         />
       )}
 

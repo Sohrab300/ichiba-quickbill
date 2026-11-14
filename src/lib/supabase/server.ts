@@ -38,6 +38,3 @@ export function createServerClient(): SupabaseClient<Database> {
   });
   return client;
 }
-
-export const getSupabaseServer = createServerClient;
-export default createServerClient;

@@ -113,6 +113,15 @@ Trade-offs:
 - `--kiosk-printing` is not the same as `--kiosk` (full-screen kiosk mode); you don't need
   `--kiosk`.
 
+## 7. Phones (MOB)
+
+Phones don't print automatically. After a sale the Completed panel shows **Print / PDF**,
+which opens the phone's own print screen: pick a Wi-Fi/Bluetooth printer the phone knows, or
+**Save as PDF** (Android) / **Share → Save to Files or WhatsApp** (iPhone) to send the bill to the
+customer. The document is the same receipt (customer copy, then store copy), 80 mm or 58 mm wide
+as set for the MOB counter. Nothing to install; there is no printing from the phone to a counter
+printer.
+
 ## Troubleshooting
 
 | Problem | Fix |

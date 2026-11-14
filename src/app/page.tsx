@@ -18,6 +18,7 @@ async function Billing() {
       userId={staff.userId}
       isAdmin={staff.role === "admin"}
       counterCode={staff.counter?.code ?? null}
+      counterKind={staff.counter?.kind ?? null}
       printWidthMm={staff.counter?.printWidthMm ?? null}
     />
   );

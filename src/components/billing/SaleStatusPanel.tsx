@@ -26,6 +26,8 @@ interface SaleStatusPanelProps {
   onDiscard: () => void;
   onReprint: () => void;
   reprint: { busy: boolean; error: string | null };
+  /** Label of the Completed panel's print button ("Reprint" unless the receipt is not printed yet). */
+  printLabel?: string;
   onNewBill: () => void;
 }
 
@@ -72,7 +74,7 @@ export function SaleStatusPanel(props: SaleStatusPanelProps) {
               className={`${btn} border-2 border-emerald-700 bg-white text-emerald-900 hover:bg-emerald-100 disabled:opacity-60 dark:bg-zinc-900 dark:text-emerald-200`}
             >
               {props.reprint.busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : <Printer className="h-5 w-5" aria-hidden />}
-              Reprint
+              {props.printLabel ?? "Reprint"}
             </button>
             <button type="button" onClick={props.onNewBill} className={`${btn} bg-emerald-700 text-white hover:bg-emerald-800`}>
               <Plus className="h-5 w-5" aria-hidden />

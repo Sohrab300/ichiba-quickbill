@@ -50,7 +50,10 @@ interface CheckoutPanelProps {
   status: ReactNode;
   /** Shown when this login cannot bill at all. */
   notice: ReactNode;
+  /** Desktop (≥ 1024px): one-press payment buttons. */
   payment: ReactNode;
+  /** Phones: payment toggles + Complete button. */
+  mobilePayment: ReactNode;
   /** Mobile-only secondary actions (e.g. Clear cart). */
   mobileActions?: ReactNode;
 }
@@ -59,13 +62,13 @@ interface CheckoutPanelProps {
  * The right pane on desktop; a sticky bottom sheet on phones (total + payment always visible,
  * breakdown behind a toggle).
  */
-export function CheckoutPanel({ totals, status, notice, payment, mobileActions }: CheckoutPanelProps) {
+export function CheckoutPanel({ totals, status, notice, payment, mobilePayment, mobileActions }: CheckoutPanelProps) {
   const [showDetails, setShowDetails] = useState(false);
 
   return (
     <aside
       aria-label="Total and payment"
-      className="sticky bottom-0 z-20 flex flex-col gap-3 lg:min-h-0 border-t-2 border-zinc-300 bg-zinc-100 p-3 shadow-[0_-8px_24px_rgba(0,0,0,0.12)] lg:static lg:z-auto lg:w-[35%] lg:max-w-xl lg:min-w-[22rem] lg:border-t-0 lg:border-l-2 lg:p-4 lg:shadow-none dark:border-zinc-800 dark:bg-zinc-900"
+      className="sticky bottom-0 z-20 flex flex-col gap-3 lg:min-h-0 border-t-2 border-zinc-300 bg-zinc-100 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.12)] lg:static lg:z-auto lg:w-[35%] lg:max-w-xl lg:min-w-[22rem] lg:border-t-0 lg:border-l-2 lg:p-4 lg:shadow-none dark:border-zinc-800 dark:bg-zinc-900"
     >
       {/* Breakdown: always shown on desktop (shrinks and scrolls if space runs out), toggled on phones. */}
       <div
@@ -110,7 +113,8 @@ export function CheckoutPanel({ totals, status, notice, payment, mobileActions }
         </div>
       </div>
 
-      <div className="order-4 shrink-0 lg:order-none">{payment}</div>
+      <div className="order-4 shrink-0 lg:hidden">{mobilePayment}</div>
+      <div className="hidden shrink-0 lg:block">{payment}</div>
     </aside>
   );
 }

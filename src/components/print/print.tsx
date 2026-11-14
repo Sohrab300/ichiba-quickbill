@@ -69,13 +69,18 @@ function afterPaint(): Promise<void> {
 /**
  * Renders `content` (one or more .receipt-copy sections) and opens the print dialog.
  * Never throws. `ok: true` means the dialog was opened, not that paper came out.
+ *
+ * `immediate`: called straight from a tap/click. Skips waiting for a paint so window.print()
+ * runs while the tap still counts as a user gesture — phone browsers (iOS Safari in particular)
+ * may ignore a print() that isn't. On a phone the system dialog offers its printers and
+ * "Save as PDF" / Share.
  */
-async function printReceipt(content: ReactNode, widthMm: PrintWidth): Promise<PrintResult> {
+async function printReceipt(content: ReactNode, widthMm: PrintWidth, immediate = false): Promise<PrintResult> {
   try {
     if (typeof window.print !== "function") {
       return { ok: false, error: "This browser cannot print." };
     }
-    await afterPaint();
+    if (!immediate) await afterPaint();
     cleanup(); // a previous print whose afterprint never fired
 
     const { root, container } = getRoot();
@@ -105,10 +110,14 @@ async function printReceipt(content: ReactNode, widthMm: PrintWidth): Promise<Pr
 }
 
 /** Prints an invoice as returned by the server: CUSTOMER COPY, page break, STORE COPY. */
-export function printInvoice(invoice: Invoice, options: { widthMm: PrintWidth; reprint?: boolean }): Promise<PrintResult> {
+export function printInvoice(
+  invoice: Invoice,
+  options: { widthMm: PrintWidth; reprint?: boolean; immediate?: boolean }
+): Promise<PrintResult> {
   return printReceipt(
     <InvoiceReceipt invoice={invoice} width={options.widthMm} reprint={options.reprint ?? false} />,
-    options.widthMm
+    options.widthMm,
+    options.immediate ?? false
   );
 }
 

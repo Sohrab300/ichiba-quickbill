@@ -93,6 +93,17 @@ async function checkBarcodeAvailable(barcode: string, forProductId?: string): Pr
 }
 
 /**
+ * The same barcode in its other common form: a 12-digit UPC-A is the 13-digit EAN-13 with a
+ * leading 0. Scanners can be set to send either, so a miss on one is retried with the other.
+ * Returns null for anything else (e.g. 7-digit item codes, EAN-8).
+ */
+function upcEanTwin(code: string): string | null {
+  if (/^\d{12}$/.test(code)) return `0${code}`;
+  if (/^0\d{12}$/.test(code)) return code.slice(1);
+  return null;
+}
+
+/**
  * Scan lookup: product_barcodes.barcode first, then products.item_code (one round trip via the
  * lookup_product RPC). Inactive products are returned; the caller decides what to do with them.
  */
@@ -103,12 +114,16 @@ export async function lookupProduct(code: string): Promise<ActionResult<Product 
     if (!parsed.success) return { success: true, data: null, statusCode: 404 };
 
     const supabase = createServerClient();
-    const { data, error } = await supabase
-      .rpc("lookup_product", { p_code: parsed.data })
-      .maybeSingle();
-    if (error) return dbError(error, "Lookup failed");
-    if (!data) return { success: true, data: null, statusCode: 404 };
-    return { success: true, data: mapProductFromDb(data), statusCode: 200 };
+    // Exact code first; then the UPC-A ⇄ EAN-13 twin (scanners differ on the leading 0).
+    for (const candidate of [parsed.data, upcEanTwin(parsed.data)]) {
+      if (!candidate) continue;
+      const { data, error } = await supabase
+        .rpc("lookup_product", { p_code: candidate })
+        .maybeSingle();
+      if (error) return dbError(error, "Lookup failed");
+      if (data) return { success: true, data: mapProductFromDb(data), statusCode: 200 };
+    }
+    return { success: true, data: null, statusCode: 404 };
   } catch (err: unknown) {
     return fromException(err, "Failed to look up code");
   }
