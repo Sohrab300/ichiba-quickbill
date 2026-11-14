@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Tag,
 } from "lucide-react";
-import { getProducts, deleteProduct } from "@/lib/actions";
+import { getProducts, deleteProduct, type ProductList } from "@/lib/actions";
 import { formatINR } from "@/lib/format";
 import type { Product } from "@/lib/supabase/mappers";
 import AddProductModal from "@/components/AddProductModal";
@@ -19,6 +19,7 @@ import EditProductModal from "@/components/EditProductModal";
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export default function ProductsPage() {
       .then((res) => {
         if (!isMounted) return;
         if (res.success && res.data) {
-          setProducts(res.data);
+          applyList(res.data);
         } else {
           setError(res.error || "Failed to load products");
         }
@@ -52,14 +53,19 @@ export default function ProductsPage() {
     };
   }, []);
 
+  function applyList(list: ProductList) {
+    setProducts(list.products);
+    setTotal(list.total);
+  }
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
     try {
-      const res = await getProducts(searchQuery);
+      const res = await getProducts({ query: searchQuery });
       if (res.success && res.data) {
-        setProducts(res.data);
+        applyList(res.data);
       } else {
         setError(res.error || "Failed to load products");
       }
@@ -76,9 +82,11 @@ export default function ProductsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await getProducts("");
+      const res = await getProducts();
       if (res.success && res.data) {
-        setProducts(res.data);
+        applyList(res.data);
+      } else {
+        setError(res.error || "Failed to load products");
       }
     } finally {
       setIsLoading(false);
@@ -95,6 +103,7 @@ export default function ProductsPage() {
       const res = await deleteProduct(product.id);
       if (res.success) {
         setProducts((prev) => prev.filter((p) => p.id !== product.id));
+        setTotal((t) => Math.max(0, t - 1));
       } else {
         alert(res.error || "Failed to delete product");
       }
@@ -115,7 +124,7 @@ export default function ProductsPage() {
             Product Catalog
           </h1>
           <p className="text-xs sm:text-sm text-zinc-500 mt-1">
-            Manage your store inventory, barcodes, and prices in INR.
+            Item codes, barcodes, selling price, MRP and GST. Prices include GST.
           </p>
         </div>
 
@@ -136,7 +145,7 @@ export default function ProductsPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search products by name, barcode, or category..."
+            placeholder="Search by name, item code, barcode or category..."
             className="w-full h-11 pl-10 pr-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
         </div>
@@ -165,6 +174,14 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {!isLoading && products.length > 0 && (
+        <p className="text-xs text-zinc-500 -mt-3">
+          {products.length < total
+            ? `Showing ${products.length.toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")} products. Search to narrow down.`
+            : `${total.toLocaleString("en-IN")} ${total === 1 ? "product" : "products"}`}
+        </p>
+      )}
+
       {/* Products Table */}
       <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xs">
         {isLoading ? (
@@ -189,10 +206,12 @@ export default function ProductsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-800/40 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-                  <th className="py-3 px-4 sm:px-6">Product</th>
-                  <th className="py-3 px-4">Barcode</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4 text-right">Price</th>
+                  <th className="py-3 px-4 sm:px-6">Item code</th>
+                  <th className="py-3 px-4">Product</th>
+                  <th className="py-3 px-4 text-right">Selling</th>
+                  <th className="py-3 px-4 text-right">MRP</th>
+                  <th className="py-3 px-4 text-right">GST</th>
+                  <th className="py-3 px-4 text-right">Stock</th>
                   <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
                 </tr>
               </thead>
@@ -200,33 +219,54 @@ export default function ProductsPage() {
                 {products.map((product) => (
                   <tr
                     key={product.id}
-                    className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                    className={`hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors ${product.isActive ? "" : "opacity-60"}`}
                   >
-                    <td className="py-3.5 px-4 sm:px-6 font-semibold text-zinc-900 dark:text-zinc-100">
-                      {product.name}
+                    <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-zinc-600 dark:text-zinc-400 align-top">
+                      {product.itemCode}
                     </td>
-                    <td className="py-3.5 px-4 font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                      {product.barcode}
+                    <td className="py-3.5 px-4 align-top">
+                      <div className="font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2 flex-wrap">
+                        {product.name}
+                        {!product.isActive && (
+                          <span className="rounded-md bg-zinc-200 dark:bg-zinc-700 px-1.5 py-0.5 text-[10px] font-bold uppercase text-zinc-600 dark:text-zinc-300">
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                        {product.category && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-zinc-700 dark:text-zinc-300">
+                            <Tag className="h-3 w-3 text-zinc-400" />
+                            {product.category}
+                          </span>
+                        )}
+                        {product.hsnCode && <span>HSN {product.hsnCode}</span>}
+                        {product.barcodes.map((b) => (
+                          <span key={b.id} className="font-mono" title="Linked barcode">
+                            {b.barcode}
+                          </span>
+                        ))}
+                      </div>
                     </td>
-                    <td className="py-3.5 px-4">
-                      {product.category ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs text-zinc-700 dark:text-zinc-300">
-                          <Tag className="h-3 w-3 text-zinc-400" />
-                          {product.category}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-400 text-xs">-</span>
-                      )}
+                    <td className="py-3.5 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums align-top whitespace-nowrap">
+                      {formatINR(product.sellingPrice)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
-                      {formatINR(product.price)}
+                    <td className="py-3.5 px-4 text-right text-zinc-600 dark:text-zinc-400 tabular-nums align-top whitespace-nowrap">
+                      {product.mrp === null ? "-" : formatINR(product.mrp)}
                     </td>
-                    <td className="py-3.5 px-4 sm:px-6 text-right">
+                    <td className="py-3.5 px-4 text-right text-zinc-700 dark:text-zinc-300 tabular-nums align-top">
+                      {product.gstRate}%
+                    </td>
+                    <td className="py-3.5 px-4 text-right text-xs text-zinc-500 tabular-nums align-top whitespace-nowrap">
+                      {product.stockQty.toLocaleString("en-IN")} {product.uom}
+                    </td>
+                    <td className="py-3.5 px-4 sm:px-6 text-right align-top">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => setEditingProduct(product)}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
                           title="Edit product"
+                          aria-label={`Edit ${product.name}`}
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
@@ -235,6 +275,7 @@ export default function ProductsPage() {
                           disabled={deletingId === product.id}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
                           title="Delete product"
+                          aria-label={`Delete ${product.name}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -255,6 +296,7 @@ export default function ProductsPage() {
           onClose={() => setIsAddOpen(false)}
           onProductCreated={(newProd) => {
             setProducts((prev) => [newProd, ...prev]);
+            setTotal((t) => t + 1);
           }}
         />
       )}

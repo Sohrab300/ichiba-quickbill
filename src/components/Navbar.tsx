@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Package, ReceiptText, Store } from "lucide-react";
+import { ShoppingCart, Package, Store } from "lucide-react";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -10,7 +10,6 @@ export function Navbar() {
   const navItems = [
     { href: "/", label: "Billing", icon: ShoppingCart },
     { href: "/products", label: "Products", icon: Package },
-    { href: "/sales", label: "Sales History", icon: ReceiptText },
   ];
 
   return (

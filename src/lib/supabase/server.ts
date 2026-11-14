@@ -1,43 +1,42 @@
 import "server-only";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 
-/**
- * Creates and returns a Supabase client configured with the service role key.
- * This runs strictly on the server and bypasses Row Level Security (RLS).
- * Never import or execute this module in client components.
- */
-export function createServerClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let client: SupabaseClient<Database> | null = null;
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    // Provide fallback during build-time page rendering or type-checking
-    if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
-      // Allow build step to succeed when env vars are not set during CI/local build
-      return createClient<Database>(
-        supabaseUrl || "https://placeholder-project.supabase.co",
-        serviceRoleKey || "placeholder-service-role-key",
-        {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-          },
-        }
-      );
-    }
+/**
+ * Server-only Supabase client using the secret (service role) key. Bypasses RLS, so it must
+ * never reach the browser.
+ *
+ * Env vars are read on first use, not at import time, so `next build` works without them. A
+ * request that needs the database fails with a clear error instead of silently talking to a
+ * placeholder project.
+ */
+export function createServerClient(): SupabaseClient<Database> {
+  if (client) return client;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const missing = [
+    !url && "NEXT_PUBLIC_SUPABASE_URL",
+    !key && "SUPABASE_SERVICE_ROLE_KEY",
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(
+      `Supabase is not configured: missing ${missing.join(" and ")}. ` +
+        "Set it in .env.local (local) or in Vercel → Settings → Environment Variables, then restart or redeploy."
+    );
+  }
+  try {
+    new URL(url!);
+  } catch {
+    throw new Error("Supabase is not configured: NEXT_PUBLIC_SUPABASE_URL is not a valid URL.");
   }
 
-  return createClient<Database>(
-    supabaseUrl || "https://placeholder-project.supabase.co",
-    serviceRoleKey || "placeholder-service-role-key",
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    }
-  );
+  client = createClient<Database>(url!, key!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return client;
 }
 
 export const getSupabaseServer = createServerClient;

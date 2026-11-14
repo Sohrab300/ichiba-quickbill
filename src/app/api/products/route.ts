@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProducts, createProduct } from "@/lib/actions";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const q = searchParams.get("q") || undefined;
-  const result = await getProducts(q);
+  const { searchParams } = request.nextUrl;
+  const query = searchParams.get("q") ?? undefined;
+  const limitParam = Number(searchParams.get("limit"));
+  const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 500) : undefined;
+  const result = await getProducts({ query, limit });
   return NextResponse.json(result, { status: result.statusCode || 200 });
 }
 

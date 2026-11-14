@@ -1,66 +1,52 @@
 import type { Database } from "./database.types";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
-type SaleRow = Database["public"]["Tables"]["sales"]["Row"];
-type SaleItemRow = Database["public"]["Tables"]["sale_items"]["Row"];
+type ProductBarcodeRow = Pick<Database["public"]["Tables"]["product_barcodes"]["Row"], "id" | "barcode">;
+
+export interface ProductBarcode {
+  id: string;
+  barcode: string;
+}
 
 export interface Product {
   id: string;
-  barcode: string;
+  itemCode: string;
   name: string;
-  price: number; // in paise (e.g. 5000 = ₹50.00)
+  sellingPrice: number; // paise, GST-inclusive
+  mrp: number | null; // paise
+  gstRate: number; // percent: 0, 5, 12, 18, 28 or 40
+  hsnCode: string | null;
+  uom: string;
   category: string | null;
+  department: string | null;
+  stockQty: number; // informational only
+  isActive: boolean;
+  barcodes: ProductBarcode[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface SaleItem {
-  id: string;
-  saleId: string;
-  productId: string | null;
-  productName: string;
-  unitPrice: number; // in paise
-  quantity: number;
-}
-
-export interface Sale {
-  id: string;
-  subtotal: number; // in paise
-  createdAt: string;
-  items?: SaleItem[];
-}
-
-export function mapProductFromDb(row: ProductRow): Product {
+export function mapProductFromDb(
+  row: ProductRow,
+  barcodes: ProductBarcodeRow[] = []
+): Product {
   return {
     id: row.id,
-    barcode: row.barcode,
+    itemCode: row.item_code,
     name: row.name,
-    price: row.price,
+    sellingPrice: row.selling_price,
+    mrp: row.mrp,
+    gstRate: row.gst_rate,
+    hsnCode: row.hsn_code,
+    uom: row.uom,
     category: row.category,
+    department: row.department,
+    stockQty: Number(row.stock_qty),
+    isActive: row.is_active,
+    barcodes: barcodes
+      .map((b) => ({ id: b.id, barcode: b.barcode }))
+      .sort((a, b) => a.barcode.localeCompare(b.barcode)),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-export function mapSaleItemFromDb(row: SaleItemRow): SaleItem {
-  return {
-    id: row.id,
-    saleId: row.sale_id,
-    productId: row.product_id,
-    productName: row.product_name,
-    unitPrice: row.unit_price,
-    quantity: row.quantity,
-  };
-}
-
-export function mapSaleFromDb(
-  row: SaleRow,
-  items?: SaleItemRow[]
-): Sale {
-  return {
-    id: row.id,
-    subtotal: row.subtotal,
-    createdAt: row.created_at,
-    items: items ? items.map(mapSaleItemFromDb) : undefined,
   };
 }

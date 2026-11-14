@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { X, Edit3, AlertCircle } from "lucide-react";
-import { updateProduct } from "@/lib/actions";
-import type { Product } from "@/lib/supabase/mappers";
+import { X, Edit3, AlertCircle, Barcode, Loader2 } from "lucide-react";
+import { updateProduct, addProductBarcode, removeProductBarcode } from "@/lib/actions";
+import type { Product, ProductBarcode } from "@/lib/supabase/mappers";
+import {
+  ProductFormFields,
+  formToValues,
+  productToForm,
+  type ProductFormState,
+} from "./ProductFormFields";
 
 interface EditProductModalProps {
   isOpen: boolean;
@@ -18,46 +24,75 @@ export function EditProductModal({
   onClose,
   onProductUpdated,
 }: EditProductModalProps) {
-  const [barcode, setBarcode] = useState(product.barcode);
-  const [name, setName] = useState(product.name);
-  const [priceRupees, setPriceRupees] = useState((product.price / 100).toFixed(2));
-  const [category, setCategory] = useState(product.category || "");
+  const [form, setForm] = useState<ProductFormState>(() => productToForm(product));
+  const [barcodes, setBarcodes] = useState<ProductBarcode[]>(product.barcodes);
+  const [newBarcode, setNewBarcode] = useState("");
+  const [barcodeBusy, setBarcodeBusy] = useState<string | null>(null); // "add" or barcode id
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
+  const publishBarcodes = (next: ProductBarcode[]) => {
+    setBarcodes(next);
+    onProductUpdated({ ...product, barcodes: next });
+  };
+
+  const handleAddBarcode = async () => {
+    const code = newBarcode.trim();
+    setBarcodeError(null);
+    if (!/^[!-~]{1,64}$/.test(code)) {
+      setBarcodeError("Barcode: up to 64 characters, no spaces.");
+      return;
+    }
+    setBarcodeBusy("add");
+    try {
+      const res = await addProductBarcode(product.id, code);
+      if (!res.success || !res.data) {
+        setBarcodeError(res.error || "Failed to link barcode");
+        return;
+      }
+      publishBarcodes([...barcodes, res.data].sort((a, b) => a.barcode.localeCompare(b.barcode)));
+      setNewBarcode("");
+    } catch (err: unknown) {
+      setBarcodeError(err instanceof Error ? err.message : "Failed to link barcode");
+    } finally {
+      setBarcodeBusy(null);
+    }
+  };
+
+  const handleRemoveBarcode = async (b: ProductBarcode) => {
+    if (!confirm(`Unlink barcode ${b.barcode} from this product?`)) return;
+    setBarcodeError(null);
+    setBarcodeBusy(b.id);
+    try {
+      const res = await removeProductBarcode(b.id);
+      if (!res.success) {
+        setBarcodeError(res.error || "Failed to remove barcode");
+        return;
+      }
+      publishBarcodes(barcodes.filter((x) => x.id !== b.id));
+    } catch (err: unknown) {
+      setBarcodeError(err instanceof Error ? err.message : "Failed to remove barcode");
+    } finally {
+      setBarcodeBusy(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const trimmedBarcode = barcode.trim();
-    const trimmedName = name.trim();
-    const parsedPrice = parseFloat(priceRupees);
-
-    if (!trimmedBarcode) {
-      setError("Barcode is required");
+    const parsed = formToValues(form);
+    if (!parsed.ok) {
+      setError(parsed.error);
       return;
     }
-    if (!trimmedName) {
-      setError("Product name is required");
-      return;
-    }
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
-      setError("Please enter a valid price in ₹ (e.g. 50 or 50.50)");
-      return;
-    }
-
-    const priceInPaise = Math.round(parsedPrice * 100);
 
     setIsLoading(true);
     try {
-      const result = await updateProduct(product.id, {
-        barcode: trimmedBarcode,
-        name: trimmedName,
-        price: priceInPaise,
-        category: category.trim() || null,
-      });
+      const result = await updateProduct(product.id, parsed.values);
 
       if (!result.success || !result.data) {
         setError(result.error || "Failed to update product");
@@ -76,7 +111,7 @@ export function EditProductModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-5 py-4">
           <div className="flex items-center gap-2">
@@ -88,101 +123,121 @@ export function EditProductModal({
             </h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {error && (
-            <div className="flex items-start gap-2.5 rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-              Barcode / SKU *
-            </label>
-            <input
-              type="text"
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              required
-              className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm font-mono text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-              Product Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Price (₹ INR) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">
-                  ₹
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={priceRupees}
-                  onChange={(e) => setPriceRupees(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-zinc-300 bg-white pl-8 pr-3 py-2.5 text-sm font-medium text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
+        <div className="overflow-y-auto">
+          {/* Product fields */}
+          <form id="edit-product-form" onSubmit={handleSubmit} className="p-5 space-y-4">
+            {error && (
+              <div className="flex items-start gap-2.5 rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
-            </div>
+            )}
+            <ProductFormFields
+              value={form}
+              onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+              accent="blue"
+              showActive
+            />
+          </form>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Category
-              </label>
+          {/* Barcode aliases (saved immediately) */}
+          <div className="px-5 pb-5 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              <Barcode className="h-3.5 w-3.5" />
+              Manufacturer barcodes
+              <span className="font-normal text-zinc-500">(changes save immediately)</span>
+            </div>
+            {barcodeError && (
+              <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300">
+                {barcodeError}
+              </div>
+            )}
+            {barcodes.length === 0 ? (
+              <p className="text-xs text-zinc-500">
+                None linked. The item code <span className="font-mono">{product.itemCode}</span> is
+                always scannable.
+              </p>
+            ) : (
+              <ul className="flex flex-wrap gap-1.5">
+                {barcodes.map((b) => (
+                  <li
+                    key={b.id}
+                    className="inline-flex items-center gap-1 rounded-md bg-zinc-100 dark:bg-zinc-800 pl-2 pr-1 py-0.5 font-mono text-xs text-zinc-700 dark:text-zinc-300"
+                  >
+                    {b.barcode}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveBarcode(b)}
+                      disabled={barcodeBusy !== null}
+                      aria-label={`Unlink barcode ${b.barcode}`}
+                      className="rounded p-0.5 text-zinc-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      {barcodeBusy === b.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <X className="h-3 w-3" />
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2">
               <input
                 type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Staples"
-                className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                value={newBarcode}
+                onChange={(e) => setNewBarcode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddBarcode();
+                  }
+                }}
+                placeholder="Scan or type an EAN to link"
+                autoComplete="off"
+                aria-label="New barcode"
+                className="flex-1 rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-mono text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               />
+              <button
+                type="button"
+                onClick={handleAddBarcode}
+                disabled={barcodeBusy !== null || !newBarcode.trim()}
+                className="px-3 rounded-xl text-xs font-semibold border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {barcodeBusy === "add" ? "Linking..." : "Link"}
+              </button>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isLoading}
-              className="px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
-            >
-              {isLoading ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </form>
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isLoading}
+            className="px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="edit-product-form"
+            disabled={isLoading}
+            className="px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {isLoading ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
       </div>
     </div>
   );

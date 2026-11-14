@@ -12,7 +12,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import { getProductByBarcode, completeSale } from "@/lib/actions";
+import { lookupProduct, completeSale } from "@/lib/actions";
 import { formatINR } from "@/lib/format";
 import { playScanSuccessBeep, playScanErrorTone } from "@/lib/audio";
 import type { Product } from "@/lib/supabase/mappers";
@@ -21,7 +21,7 @@ import AddProductModal from "@/components/AddProductModal";
 
 export interface BillItem {
   productId: string;
-  barcode: string;
+  itemCode: string;
   name: string;
   unitPrice: number; // in paise
   quantity: number;
@@ -51,9 +51,9 @@ function billReducer(state: BillItem[], action: BillAction): BillItem[] {
       return [
         {
           productId: action.product.id,
-          barcode: action.product.barcode,
+          itemCode: action.product.itemCode,
           name: action.product.name,
-          unitPrice: action.product.price,
+          unitPrice: action.product.sellingPrice,
           quantity: 1,
         },
         ...state,
@@ -164,9 +164,26 @@ export default function BillingPage() {
     setStatusMessage(null);
 
     try {
-      const result = await getProductByBarcode(barcode);
+      const result = await lookupProduct(barcode);
 
-      if (result.success && result.data) {
+      if (!result.success) {
+        // Lookup itself failed (network / database): do not treat it as an unknown code.
+        playScanErrorTone();
+        setScanFlash("error");
+        setTimeout(() => setScanFlash(null), 1000);
+        setStatusMessage({
+          type: "error",
+          text: result.error || "Error looking up code. Please try again.",
+        });
+      } else if (result.data && !result.data.isActive) {
+        playScanErrorTone();
+        setScanFlash("error");
+        setTimeout(() => setScanFlash(null), 1000);
+        setStatusMessage({
+          type: "error",
+          text: `${result.data.itemCode} · ${result.data.name} is inactive and cannot be billed.`,
+        });
+      } else if (result.data) {
         // Product Found
         playScanSuccessBeep();
         dispatch({ type: "ADD_PRODUCT", product: result.data });
@@ -186,7 +203,7 @@ export default function BillingPage() {
 
         setStatusMessage({
           type: "error",
-          text: `Barcode ${barcode} not in catalog. Add it below.`,
+          text: `Code ${barcode} not in catalog. Add it below.`,
         });
 
         // Open quick add modal prefilled
@@ -241,12 +258,8 @@ export default function BillingPage() {
     setStatusMessage(null);
 
     try {
-      const itemsPayload = bill.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-      }));
-
-      const res = await completeSale({ items: itemsPayload });
+      // Checkout is stubbed until invoice creation lands (prompt 3); this always fails.
+      const res = await completeSale();
 
       if (res.success && res.data) {
         playScanSuccessBeep();
@@ -387,7 +400,7 @@ export default function BillingPage() {
                     </h4>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500">
-                        {item.barcode}
+                        {item.itemCode}
                       </span>
                       <span className="text-xs text-zinc-500">
                         • {formatINR(item.unitPrice)} each

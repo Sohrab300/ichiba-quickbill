@@ -4,9 +4,16 @@ import { useState } from "react";
 import { X, Plus, AlertCircle } from "lucide-react";
 import { createProduct } from "@/lib/actions";
 import type { Product } from "@/lib/supabase/mappers";
+import {
+  ProductFormFields,
+  emptyProductForm,
+  formToValues,
+  type ProductFormState,
+} from "./ProductFormFields";
 
 interface AddProductModalProps {
   isOpen: boolean;
+  /** Code that was scanned and not found; linked to the new product as a barcode alias. */
   initialBarcode?: string;
   onClose: () => void;
   onProductCreated: (product: Product) => void;
@@ -18,10 +25,8 @@ export function AddProductModal({
   onClose,
   onProductCreated,
 }: AddProductModalProps) {
+  const [form, setForm] = useState<ProductFormState>(emptyProductForm);
   const [barcode, setBarcode] = useState(initialBarcode);
-  const [name, setName] = useState("");
-  const [priceRupees, setPriceRupees] = useState("");
-  const [category, setCategory] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,33 +36,22 @@ export function AddProductModal({
     e.preventDefault();
     setError(null);
 
+    const parsed = formToValues(form);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
     const trimmedBarcode = barcode.trim();
-    const trimmedName = name.trim();
-    const parsedPrice = parseFloat(priceRupees);
-
-    if (!trimmedBarcode) {
-      setError("Barcode is required");
+    if (trimmedBarcode && !/^[!-~]{1,64}$/.test(trimmedBarcode)) {
+      setError("Barcode: up to 64 characters, no spaces.");
       return;
     }
-    if (!trimmedName) {
-      setError("Product name is required");
-      return;
-    }
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
-      setError("Please enter a valid price in ₹ (e.g. 50 or 50.50)");
-      return;
-    }
-
-    // Convert Rupees to Paise (₹1.50 = 150 paise)
-    const priceInPaise = Math.round(parsedPrice * 100);
 
     setIsLoading(true);
     try {
       const result = await createProduct({
-        barcode: trimmedBarcode,
-        name: trimmedName,
-        price: priceInPaise,
-        category: category.trim() || null,
+        ...parsed.values,
+        barcode: trimmedBarcode || undefined,
       });
 
       if (!result.success || !result.data) {
@@ -77,7 +71,7 @@ export function AddProductModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 px-5 py-4">
           <div className="flex items-center gap-2">
@@ -89,7 +83,9 @@ export function AddProductModal({
             </h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
           >
             <X className="h-5 w-5" />
@@ -97,7 +93,7 @@ export function AddProductModal({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
           {error && (
             <div className="flex items-start gap-2.5 rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-300 border border-red-200 dark:border-red-900">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -105,68 +101,31 @@ export function AddProductModal({
             </div>
           )}
 
+          <ProductFormFields
+            value={form}
+            onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+            accent="emerald"
+          />
+
           <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-              Barcode / SKU *
+            <label
+              htmlFor="add-barcode"
+              className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1"
+            >
+              Manufacturer barcode (EAN)
             </label>
             <input
+              id="add-barcode"
               type="text"
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
-              placeholder="e.g. 8901030865412"
-              required
+              placeholder="Optional, e.g. 8901030865412"
+              autoComplete="off"
               className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm font-mono text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-              Product Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Parle-G Biscuits 800g"
-              required
-              className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Price (₹ INR) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-zinc-400">
-                  ₹
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={priceRupees}
-                  onChange={(e) => setPriceRupees(e.target.value)}
-                  placeholder="0.00"
-                  required
-                  className="w-full rounded-xl border border-zinc-300 bg-white pl-8 pr-3 py-2.5 text-sm font-medium text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                Category
-              </label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="e.g. Snacks"
-                className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              />
-            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Scanning this barcode will find the product. The item code is always scannable too.
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
