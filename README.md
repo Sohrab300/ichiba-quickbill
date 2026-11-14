@@ -1,36 +1,146 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ichiba POS 🏪
 
-## Getting Started
+A simple, fast, barcode-scanning billing web application built for the **Ichiba** retail store. Designed for supermarket and retail workers operating on mobile phones, tablets, or laptops with physical barcode scanners or built-in device cameras.
 
-First, run the development server:
+---
 
+## ⚡ Tech Stack
+
+- **Framework**: Next.js 16 (App Router, Turbopack, TypeScript)
+- **Styling**: Tailwind CSS
+- **Database & Backend**: [Supabase](https://supabase.com) (Hosted PostgreSQL with Row Level Security and Atomic RPC Transactions)
+- **Data Access**: `@supabase/supabase-js` + `@supabase/ssr` (strictly server-side, no ORM)
+- **Validation**: Zod
+- **Barcode & QR Scanning**: `html5-qrcode` (device camera) + Keyboard wedge listener (USB & Bluetooth handheld scanners)
+- **Audio Feedback**: Web Audio API (synthesized crisp supermarket scan beeps and error buzzers)
+
+---
+
+## 🚀 Key Features
+
+1. **High-Speed Billing Screen (`/`)**:
+   - **Always-Focused Scan Input**: Automatically captures scans from USB/Bluetooth handheld barcode scanners (which send digits followed by `Enter`). Auto-refocuses after every scan and user interaction.
+   - **Camera Barcode Scanner**: Toggle camera scanning powered by `html5-qrcode` with environment lens selection. Includes a toggle for **Continuous Scanning** (scan multiple items without closing) or **Single Scan**.
+   - **Catalog Lookup & Live Cart**: Instant lookup by barcode. Existing items automatically increment in quantity.
+   - **Quick Add Modal**: If a scanned barcode does not exist in the database, a prefilled modal appears instantly to save the product and add it to the active bill without disrupting workflow.
+   - **Live Sticky Subtotal**: Live calculation formatted in Indian Rupees (**₹ INR**, `en-IN`), with quantity direct edits, increment/decrement buttons, and line item removal.
+   - **Atomic Transaction Sale Completion**: The `Complete Sale` action calls the Postgres function `complete_sale(items)`, snapshotting actual current product names and DB prices to compute the exact subtotal server-side.
+   - **Audio & Visual Feedback**: Distinct synthesized success beep and error tone/visual flashes on scan events.
+
+2. **Product Catalog (`/products`)**:
+   - Manage your store's inventory: list, search (by name, barcode, or category), create, edit, and delete products.
+   - Prices stored as integer **paise** to eliminate floating-point currency errors.
+
+3. **Sales History & Receipts (`/sales`)**:
+   - Review past transactions, transaction timestamps, item counts, and total revenue.
+   - Click any transaction to inspect line items with historical snapshot prices and names.
+
+---
+
+## 🔐 Supabase Architecture & Security
+
+- **Row Level Security (RLS)**: Enabled across `products`, `sales`, and `sale_items`. No public access policies are granted, meaning the public `anon` key cannot read or alter store data.
+- **Server-Only Service Role Client**: Database access is performed exclusively on the server in `src/lib/supabase/server.ts` guarded by `import "server-only"`. The `SUPABASE_SERVICE_ROLE_KEY` is never sent or exposed to client browsers.
+- **Atomic `complete_sale` RPC**: Executes inside a single PostgreSQL transaction. Product prices and names are retrieved directly from the database (not trusted from client payloads). Execution is revoked from `anon`/`authenticated` and granted strictly to `service_role`.
+
+---
+
+## 🛠️ Supabase Setup Guide
+
+Follow these steps to set up your hosted Supabase Postgres database:
+
+### 1. Create a Supabase Project
+1. Log into your account at [supabase.com/dashboard](https://supabase.com/dashboard).
+2. Click **New Project**, select your organization, choose a project name (e.g., `ichiba-pos`), set a secure database password, and select a region close to your store.
+
+### 2. Retrieve API Credentials
+In your Supabase project dashboard:
+1. Navigate to **Project Settings** (gear icon) -> **API**.
+2. Copy the **Project URL** (e.g. `https://xyzcompany.supabase.co`).
+3. Under **Project API keys**, find `service_role` (click "Reveal").
+   > ⚠️ **IMPORTANT**: `service_role` has admin privileges and bypasses RLS. Keep it secret. Never commit it to git or prefix it with `NEXT_PUBLIC_`.
+
+### 3. Configure Local Environment
+Create your local environment file:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
+```
+Fill in the values in `.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 4. Link Project & Push Migrations
+Authenticate the Supabase CLI and link your hosted project:
+```bash
+# Login to Supabase CLI (opens browser authentication)
+npx supabase login
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+# Link your local repository to your remote project (find your Project Reference ID in Project Settings -> General)
+npx supabase link --project-ref <your-project-ref>
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Apply the database migration (creates tables, indexes, RLS, and complete_sale RPC)
+npx supabase db push
+```
 
-## Learn More
+### 5. Seed Initial Products
+You can seed ~10 realistic retail products with valid EAN-13 barcodes into your database:
 
-To learn more about Next.js, take a look at the following resources:
+**Option A (Supabase CLI)**:
+```bash
+npx supabase db push --include-seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Option B (Supabase Dashboard SQL Editor)**:
+1. Open **SQL Editor** in the Supabase Dashboard.
+2. Open `supabase/seed.sql` in this repo, copy its contents, and paste into the query editor.
+3. Click **Run**.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 6. (Optional) Regenerating TypeScript Database Types
+Whenever you update your database schema in Supabase, you can regenerate `database.types.ts`:
+```bash
+npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 💻 Running the Application
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ensure Node.js (>= 20) is installed, then run:
+
+```bash
+# Install dependencies
+npm install
+
+# Start local development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## 📷 Scanner Usage Guide
+
+### Hardware Barcode Scanners (USB / Bluetooth)
+- Any standard barcode scanner operates in **keyboard wedge** mode.
+- When an item is scanned, the scanner types the barcode digits and emits an `Enter` keystroke.
+- The Billing page keeps the barcode input permanently focused. Simply point and shoot!
+
+### Camera Barcode Scanning
+- Click the **"Scan with Camera"** button on the billing bar.
+- Allow camera permissions when prompted.
+- Position the product barcode within the viewfinder box.
+- Check the **"Continuous scanning"** box to scan multiple items in sequence without the camera closing.
+- > 🔒 **Note on Camera Permissions**: Modern web browsers restrict camera access (`getUserMedia`) to secure contexts (**HTTPS** or **`http://localhost`**). If running on a local network for testing on a phone, use localhost or an HTTPS tunnel (such as ngrok or Cloudflare Tunnel).
+
+---
+
+## 🔮 Future Ideas & Roadmap
+
+- **Multi-Worker Supabase Auth & Per-Worker RLS**: Add worker login accounts with role-based policies (e.g. Cashier vs Store Manager).
+- **GST / Tax Breakdown**: Configure GST rates (5%, 12%, 18%) per product category with CGST/SGST line receipts.
+- **ESC/POS Thermal Receipt Printing**: Direct Bluetooth or WebUSB thermal receipt printer integration.
+- **Inventory & Low Stock Alerts**: Decrement stock quantities on sale completion with low stock warnings.
+- **Offline PWA / Sync**: Local caching with background synchronization when internet connectivity drops.
