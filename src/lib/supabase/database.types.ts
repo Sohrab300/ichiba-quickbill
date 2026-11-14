@@ -447,6 +447,73 @@ export type Database = {
         Returns: Json
       }
       get_invoice: { Args: { p_invoice_id: string }; Returns: Json }
+      invoice_day_totals: {
+        Args: { p_counter_id?: string; p_from: string; p_to: string }
+        Returns: {
+          cgst_total: number
+          grand_total: number
+          invoice_count: number
+          payment_method: string
+          round_off: number
+          sgst_total: number
+          taxable_total: number
+        }[]
+      }
+      invoice_export_lines: {
+        Args: {
+          p_after_created_at?: string
+          p_after_invoice_no?: string
+          p_after_line_no?: number
+          p_counter_id?: string
+          p_from: string
+          p_limit?: number
+          p_to: string
+        }
+        Returns: {
+          cashier_name: string
+          cgst: number
+          counter_code: string
+          created_at: string
+          gst_rate: number
+          hsn_code: string | null
+          invoice_no: string
+          item_code: string
+          line_no: number
+          line_total: number
+          mrp: number | null
+          name: string
+          payment_method: string
+          qty: number
+          sgst: number
+          taxable_value: number
+          unit_price: number
+          uom: string
+        }[]
+      }
+      invoice_export_summary: {
+        Args: {
+          p_after_created_at?: string
+          p_after_invoice_no?: string
+          p_counter_id?: string
+          p_from: string
+          p_limit?: number
+          p_to: string
+        }
+        Returns: {
+          cashier_name: string
+          cgst_total: number
+          counter_code: string
+          created_at: string
+          grand_total: number
+          invoice_no: string
+          item_count: number
+          payment_method: string
+          round_off: number
+          sgst_total: number
+          taxable_total: number
+          total_qty: number
+        }[]
+      }
       invoice_json: { Args: { p_invoice_id: string }; Returns: Json }
       lookup_product: {
         Args: { p_code: string }

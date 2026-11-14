@@ -9,3 +9,10 @@ export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 /** Limits enforced by create_invoice() (supabase/migrations/20261114230000_invoices.sql). */
 export const MAX_INVOICE_LINES = 500;
 export const MAX_LINE_QTY = 9999;
+
+export const PAYMENT_LABELS: Record<PaymentMethod, string> = { cash: "Cash", upi: "UPI", card: "Card" };
+
+/** "Cash" / "UPI" / "Card"; "—" for anything else. Safe in server and client components. */
+export function paymentLabel(method: string | null | undefined): string {
+  return method && method in PAYMENT_LABELS ? PAYMENT_LABELS[method as PaymentMethod] : "—";
+}

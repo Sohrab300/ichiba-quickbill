@@ -31,9 +31,12 @@ A simple, fast, barcode-scanning billing web application built for the **Ichiba*
    - Manage your store's inventory: list, search (by name, barcode, or category), create, edit, and delete products.
    - Prices stored as integer **paise** to eliminate floating-point currency errors.
 
-3. **Sales History & Receipts (`/sales`)**:
-   - Review past transactions, transaction timestamps, item counts, and total revenue.
-   - Click any transaction to inspect line items with historical snapshot prices and names.
+3. **Invoice History (`/invoices`)**:
+   - Server-paginated list by IST date, counter and invoice number, with day totals (taxable, CGST, SGST, grand total, per payment method). Cashiers see today's invoices of their own counter.
+   - Detail view with every line and the HSN/GST summary, plus Reprint (fetched from Supabase, marked REPRINT).
+   - Admin CSV exports (UTF-8 with BOM for Excel): `/api/exports/daily-summary?date=YYYY-MM-DD[&counter=CL1]` (one row per invoice) and `/api/exports/daily-lines?…` (one row per line). Opening them in Excel without losing leading zeros: [docs/EXPORTS.md](docs/EXPORTS.md).
+
+4. **Settings (`/settings`, admin)**: store header, FY label, counter invoice prefixes and print widths. Issued invoices never change.
 
 ---
 

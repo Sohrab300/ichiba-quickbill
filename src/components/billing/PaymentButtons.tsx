@@ -1,7 +1,7 @@
 "use client";
 
 import { Banknote, CreditCard, Loader2, QrCode, type LucideIcon } from "lucide-react";
-import type { PaymentMethod } from "@/lib/constants";
+import { paymentLabel, type PaymentMethod } from "@/lib/constants";
 
 export interface PaymentOption {
   method: PaymentMethod;
@@ -19,9 +19,7 @@ export const PAYMENT_OPTIONS: readonly PaymentOption[] = [
   { method: "card", label: "Card", shortcut: "F9", icon: CreditCard, className: "bg-sky-800 hover:bg-sky-900 active:bg-sky-950" },
 ];
 
-export function paymentLabel(method: PaymentMethod | null | undefined): string {
-  return PAYMENT_OPTIONS.find((o) => o.method === method)?.label ?? "—";
-}
+export { paymentLabel };
 
 interface PaymentButtonsProps {
   disabled: boolean;

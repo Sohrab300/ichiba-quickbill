@@ -11,6 +11,7 @@ import { MAX_INVOICE_LINES, MAX_LINE_QTY, PAYMENT_METHODS } from "./constants";
 import { invoiceJsonSchema, type Invoice } from "./invoice";
 import type { ActionResult } from "./actions";
 import { startOfTodayIst, toInvoiceNoSearchTerm } from "./invoice-search";
+import { fetchInvoice } from "./invoice-history";
 
 export interface CompleteSaleResult extends ActionResult<Invoice> {
   /**
@@ -167,22 +168,19 @@ export async function getInvoiceForReprint(invoiceId: string): Promise<ActionRes
     const id = z.uuid().safeParse(invoiceId);
     if (!id.success) return fail("Invalid invoice id", 400);
 
-    const { data, error } = await createServerClient().rpc("get_invoice", { p_invoice_id: id.data });
-    if (error) {
-      console.error("get_invoice failed", error);
-      return fail(`Could not load the invoice: ${error.message}`, 500);
+    let invoice;
+    try {
+      invoice = await fetchInvoice(id.data);
+    } catch (err: unknown) {
+      console.error("get_invoice failed", err);
+      return fail(err instanceof Error ? err.message : "Could not load the invoice.", 500);
     }
-    if (data === null) return fail("Invoice not found", 404);
+    if (invoice === null) return fail("Invoice not found", 404);
 
-    const invoice = invoiceJsonSchema.safeParse(data);
-    if (!invoice.success) {
-      console.error("Unreadable get_invoice response", invoice.error.issues);
-      return fail("Could not read the invoice.", 500);
-    }
-    const allowed = staff.role === "admin" || (staff.counter !== null && invoice.data.counterId === staff.counter.id);
+    const allowed = staff.role === "admin" || (staff.counter !== null && invoice.counterId === staff.counter.id);
     if (!allowed) return fail("Invoice not found", 404);
 
-    return { success: true, data: invoice.data, statusCode: 200 };
+    return { success: true, data: invoice, statusCode: 200 };
   } catch (err: unknown) {
     return fromException(err, "Could not load the invoice.");
   }

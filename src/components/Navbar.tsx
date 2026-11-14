@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingCart, Package, Store, LogOut, Printer } from "lucide-react";
+import { ShoppingCart, Package, Store, LogOut, Printer, ReceiptText, Settings } from "lucide-react";
 import { signOut } from "@/lib/auth-actions";
 import type { PrintWidth } from "@/lib/print-settings";
 import { PrintSettingsDialog } from "@/components/print/PrintSettingsDialog";
@@ -22,9 +22,16 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
   const showNav = pathname !== "/login";
   const [printSettingsOpen, setPrintSettingsOpen] = useState(false);
 
+  const isAdmin = staff?.role === "admin";
   const navItems = [
     { href: "/", label: "Billing", icon: ShoppingCart },
-    { href: "/products", label: "Products", icon: Package },
+    { href: "/invoices", label: "Invoices", icon: ReceiptText },
+    ...(isAdmin
+      ? [
+          { href: "/products", label: "Products", icon: Package },
+          { href: "/settings", label: "Settings", icon: Settings },
+        ]
+      : []),
   ];
 
   return (
@@ -70,7 +77,7 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
                     }`}
                   >
                     <Icon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{item.label}</span>
+                    <span className="hidden md:inline">{item.label}</span>
                   </Link>
                 );
               })}
@@ -131,6 +138,25 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
   );
 }
 export default Navbar;
+
+/**
+ * Static header shown while the session loads (root layout Suspense fallback). It must not read
+ * the URL (usePathname): on routes with dynamic params that would block prerendering.
+ */
+export function NavbarSkeleton() {
+  return (
+    <header className="sticky top-0 z-40 h-16 w-full border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className="mx-auto flex h-full max-w-7xl items-center px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm">
+            <Store className="h-5 w-5" />
+          </div>
+          <span className="hidden font-extrabold text-xl tracking-tight text-zinc-900 sm:inline dark:text-zinc-100">Ichiba</span>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 const clockFormat = new Intl.DateTimeFormat("en-IN", {
   weekday: "short",
