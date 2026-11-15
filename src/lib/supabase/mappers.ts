@@ -21,6 +21,8 @@ export interface Product {
   department: string | null;
   stockQty: number; // informational only
   isActive: boolean;
+  /** Loose fruit/vegetables priced per kg: qty is kg with up to 3 decimals (REQUIREMENTS.md 17). */
+  soldByWeight: boolean;
   barcodes: ProductBarcode[];
   createdAt: string;
   updatedAt: string;
@@ -43,6 +45,7 @@ export function mapProductFromDb(
     department: row.department,
     stockQty: Number(row.stock_qty),
     isActive: row.is_active,
+    soldByWeight: row.sold_by_weight ?? false,
     barcodes: barcodes
       .map((b) => ({ id: b.id, barcode: b.barcode }))
       .sort((a, b) => a.barcode.localeCompare(b.barcode)),

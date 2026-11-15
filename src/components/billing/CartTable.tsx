@@ -1,28 +1,36 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { Minus, Plus, X } from "lucide-react";
+import { AlertCircle, Minus, Plus, X } from "lucide-react";
 import { formatINR } from "@/lib/format";
-import { chargedPrice, type CartAction, type CartItem } from "@/lib/cart";
-import { MAX_LINE_QTY } from "@/lib/constants";
+import { canDecrement, canIncrement, chargedPrice, type CartAction, type CartItem } from "@/lib/cart";
+import { formatQty } from "@/lib/qty";
 import { Basket } from "@/components/brand/Illustrations";
 import { Button } from "@/components/ui/Button";
-import { fieldBase } from "@/components/ui/Field";
 import { cx } from "@/components/ui/cx";
+import { QtyInput, qtyDraftProblem, type QtyDraft } from "./QtyInput";
 
 /** A cart line with its preview amount (src/lib/gst.ts, on the charged price). */
 export type CartTableLine = CartItem & { lineTotal: number };
 
 interface CartTableProps {
   items: CartTableLine[];
-  /** The most recently scanned line; `seq` changes on every scan so re-scans scroll too. */
-  highlight: { productId: string; seq: number } | null;
+  /**
+   * The most recently scanned line; `seq` changes on every scan so re-scans scroll too.
+   * focusQty: also put the cursor in its qty box (a weighed item, so the weight can be typed).
+   */
+  highlight: { productId: string; seq: number; focusQty?: boolean } | null;
   locked: boolean;
   dispatch: (action: CartAction) => void;
   /** Called after any button/qty action so focus can go back to the scan box. */
   onDone: () => void;
   /** Double-click / double-tap on a line's Price: open the price edit beside `anchor`. */
   onEditPrice: (productId: string, anchor: HTMLElement) => void;
+  /** Unsettled qty box text per product (the billing screen blocks payment on an invalid one). */
+  qtyDrafts: Readonly<Record<string, QtyDraft>>;
+  onQtyDraft: (productId: string, draft: QtyDraft | null) => void;
+  /** A scanner burst typed into a qty box: bill it as a scan. */
+  onScan: (code: string) => void;
 }
 
 /** Two taps closer than this (ms) count as a double-tap. */
@@ -81,20 +89,45 @@ function PriceTrigger({
   );
 }
 
-// One DOM per line: a card on phones, a table row (shared column template) from lg up.
-const LG_COLUMNS =
-  "lg:grid-cols-[2.5rem_minmax(0,1fr)_5.5rem_5.5rem_9.75rem_6.5rem_3rem] lg:items-center lg:gap-x-3 lg:gap-y-0 " +
-  "lg:[grid-template-areas:'idx_name_mrp_price_qty_amount_remove']";
+// One DOM per line: a card on phones, a table row (shared column template) from lg up. A line
+// whose qty box holds an invalid value gets one more row for the message.
+const LG_COLUMN_SIZES =
+  "lg:grid-cols-[2.5rem_minmax(0,1fr)_5.5rem_6.5rem_12.5rem_6.5rem_3rem] lg:items-center lg:gap-x-3 lg:gap-y-0 ";
+const LG_COLUMNS = LG_COLUMN_SIZES + "lg:[grid-template-areas:'idx_name_mrp_price_qty_amount_remove']";
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 [grid-template-areas:'name_remove'_'qty_amount'] " + LG_COLUMNS;
+const ROW_GRID_WITH_MESSAGE =
+  "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 [grid-template-areas:'name_remove'_'qty_amount'_'msg_msg'] " +
+  LG_COLUMN_SIZES +
+  "lg:[grid-template-areas:'idx_name_mrp_price_qty_amount_remove'_'._msg_msg_msg_msg_msg_msg']";
 
-export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPrice }: CartTableProps) {
+/** "₹70.00/kg" on weighed lines, "₹45.00" otherwise. */
+function PerUnit({ item }: { item: CartItem }) {
+  return item.soldByWeight ? <span className="text-xs font-semibold text-ink-muted">/kg</span> : null;
+}
+
+export function CartTable({
+  items,
+  highlight,
+  locked,
+  dispatch,
+  onDone,
+  onEditPrice,
+  qtyDrafts,
+  onQtyDraft,
+  onScan,
+}: CartTableProps) {
   const listRef = useRef<HTMLOListElement>(null);
 
   useEffect(() => {
     if (!highlight) return;
     const row = listRef.current?.querySelector<HTMLElement>(`[data-product-id="${CSS.escape(highlight.productId)}"]`);
     row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (highlight.focusQty) {
+      const input = row?.querySelector<HTMLInputElement>("input[data-qty-input]");
+      input?.focus({ preventScroll: true }); // scrollIntoView above does the scrolling
+      input?.select(); // also when it already had focus (no focus event then)
+    }
   }, [highlight]);
 
   if (items.length === 0) {
@@ -132,16 +165,28 @@ export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPr
       <ol ref={listRef} className="space-y-2 p-3 lg:min-h-0 lg:flex-1 lg:space-y-0 lg:overflow-y-auto lg:p-0" aria-label="Items in this bill">
         {items.map((item, index) => {
           const isNew = highlight?.productId === item.productId;
+          const draft = qtyDrafts[item.productId];
+          const qtyProblem = draft?.show ? qtyDraftProblem(item, draft) : null;
+          const messageId = `qty-msg-${item.productId}`;
           return (
             <li
               key={item.productId}
               data-product-id={item.productId}
               className={cx(
-                ROW_GRID,
+                "relative",
+                qtyProblem ? ROW_GRID_WITH_MESSAGE : ROW_GRID,
                 "rounded-card border p-3 shadow-hard-sm lg:rounded-none lg:border-0 lg:border-b-hairline lg:border-b-ink/20 lg:px-3 lg:py-1.5 lg:shadow-none",
                 isNew ? "border-brand bg-brand-soft lg:border-l-[5px] lg:border-l-brand" : "border-ink bg-surface"
               )}
             >
+              {isNew && (
+                // Re-mounted per scan (key) so the flash replays when the same line is scanned again.
+                <span
+                  key={highlight.seq}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 z-10 animate-scan-flash rounded-card ring-4 ring-brand ring-inset lg:rounded-none"
+                />
+              )}
               <span className="num hidden text-sm font-bold text-ink-muted [grid-area:idx] lg:block">
                 {index + 1}
               </span>
@@ -160,18 +205,38 @@ export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPr
                   )}
                   {" · GST "}
                   <span className="num">{item.gstRate}%</span>
-                  <span className="lg:hidden">
-                    {" · "}
-                    <PriceTrigger
-                      item={item}
-                      locked={locked}
-                      onEdit={(anchor) => onEditPrice(item.productId, anchor)}
-                      className="-mx-1 px-1 py-0.5 text-ink"
-                    >
-                      {formatINR(chargedPrice(item))}
-                    </PriceTrigger>{" "}
-                    each
-                  </span>
+                  {item.soldByWeight ? (
+                    <>
+                      {" · "}
+                      <span className="num font-semibold text-ink">{formatQty(item.qtyMilli, true)} kg</span>
+                      {" × "}
+                      <span className="lg:hidden">
+                        <PriceTrigger
+                          item={item}
+                          locked={locked}
+                          onEdit={(anchor) => onEditPrice(item.productId, anchor)}
+                          className="-mx-1 px-1 py-0.5 text-ink"
+                        >
+                          {formatINR(chargedPrice(item))}
+                        </PriceTrigger>
+                      </span>
+                      <span className="num hidden text-ink lg:inline">{formatINR(chargedPrice(item))}</span>
+                      /kg
+                    </>
+                  ) : (
+                    <span className="lg:hidden">
+                      {" · "}
+                      <PriceTrigger
+                        item={item}
+                        locked={locked}
+                        onEdit={(anchor) => onEditPrice(item.productId, anchor)}
+                        className="-mx-1 px-1 py-0.5 text-ink"
+                      >
+                        {formatINR(chargedPrice(item))}
+                      </PriceTrigger>{" "}
+                      each
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -187,6 +252,7 @@ export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPr
                 >
                   {formatINR(chargedPrice(item))}
                 </PriceTrigger>
+                <PerUnit item={item} />
               </span>
 
               <div className="flex items-center gap-1 [grid-area:qty] lg:justify-center">
@@ -194,51 +260,34 @@ export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPr
                   variant="secondary"
                   size="sm"
                   square
-                  disabled={locked || item.qty <= 1}
+                  disabled={locked || !canDecrement(item)}
                   onClick={() => act({ type: "decrement", productId: item.productId })}
-                  aria-label={`One less ${item.name}`}
+                  aria-label={item.soldByWeight ? `1 kg less ${item.name}` : `One less ${item.name}`}
                 >
                   <Minus className="h-5 w-5" />
                 </Button>
-                <input
-                  // Uncontrolled and re-keyed on qty: typing is free-form, committed on blur/Enter,
-                  // and a scan that bumps the qty refreshes the box.
-                  key={item.qty}
-                  defaultValue={item.qty}
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  aria-label={`Quantity of ${item.name}`}
-                  disabled={locked}
-                  onFocus={(e) => e.currentTarget.select()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                      onDone();
-                    } else if (e.key === "Escape") {
-                      e.currentTarget.value = String(item.qty);
-                      e.currentTarget.blur();
-                      onDone();
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const qty = Number.parseInt(e.currentTarget.value.replace(/\D/g, ""), 10);
-                    if (Number.isFinite(qty) && qty >= 1 && qty !== item.qty) {
-                      dispatch({ type: "setQty", productId: item.productId, qty: Math.min(qty, MAX_LINE_QTY) });
-                    } else {
-                      e.currentTarget.value = String(item.qty);
-                    }
-                  }}
-                  className={cx(fieldBase, "num h-11 w-14 text-center text-lg font-bold")}
+                <QtyInput
+                  item={item}
+                  draft={draft}
+                  onDraft={(d) => onQtyDraft(item.productId, d)}
+                  locked={locked}
+                  dispatch={dispatch}
+                  onDone={onDone}
+                  onScan={onScan}
+                  messageId={messageId}
                 />
+                {item.soldByWeight && (
+                  <span className="w-5 text-sm font-bold text-ink" aria-hidden>
+                    kg
+                  </span>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
                   square
-                  disabled={locked || item.qty >= MAX_LINE_QTY}
+                  disabled={locked || !canIncrement(item)}
                   onClick={() => act({ type: "increment", productId: item.productId })}
-                  aria-label={`One more ${item.name}`}
+                  aria-label={item.soldByWeight ? `1 kg more ${item.name}` : `One more ${item.name}`}
                 >
                   <Plus className="h-5 w-5" />
                 </Button>
@@ -259,6 +308,17 @@ export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPr
               >
                 <X className="h-5 w-5" />
               </Button>
+
+              {qtyProblem && (
+                <p
+                  id={messageId}
+                  role="alert"
+                  className="flex items-center gap-1.5 text-sm font-semibold text-danger [grid-area:msg] lg:justify-end lg:pb-1"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+                  {qtyProblem}
+                </p>
+              )}
             </li>
           );
         })}

@@ -12,6 +12,7 @@ import { cx } from "@/components/ui/cx";
 import { requireStaffForPage } from "@/lib/auth";
 import { paymentLabel } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
+import { formatLinesAndPieces, formatQty } from "@/lib/qty";
 import type { AuditedInvoice, Invoice } from "@/lib/invoice";
 import { getInvoiceForHistory, type HistoryInvoice } from "@/lib/invoice-history";
 import { toInvoiceNoSearchTerm } from "@/lib/invoice-search";
@@ -150,7 +151,7 @@ function InvoiceView({
 
       <section aria-labelledby="lines-heading" className="space-y-2">
         <h2 id="lines-heading" className="text-lg font-bold">
-          Items <span className="num text-sm font-normal text-ink-muted">({invoice.itemCount} lines · qty {invoice.totalQty})</span>
+          Items <span className="num text-sm font-normal text-ink-muted">({formatLinesAndPieces(invoice.itemCount, invoice.totalQty)})</span>
         </h2>
         {edited && (
           <p className="text-sm text-ink-muted">
@@ -194,7 +195,15 @@ function InvoiceView({
                   <td className="px-3 py-2.5 font-mono text-xs">{it.hsnCode ?? "—"}</td>
                   <td className="num px-3 py-2.5 text-right">{it.gstRate}%</td>
                   <td className="num px-3 py-2.5 text-right">
-                    {it.qty} <span className="text-xs text-ink-muted">{it.uom}</span>
+                    {it.soldByWeight ? (
+                      <>
+                        {formatQty(it.qtyMilli, true)} <span className="text-xs text-ink-muted">kg</span>
+                      </>
+                    ) : (
+                      <>
+                        {formatQty(it.qtyMilli, false)} <span className="text-xs text-ink-muted">{it.uom}</span>
+                      </>
+                    )}
                   </td>
                   <td className="num px-3 py-2.5 text-right">
                     <PriceCell charged={it.unitPrice} catalog={editedLines.get(it.lineNo)?.catalogPrice ?? null} />

@@ -16,6 +16,7 @@ export interface ProductFormState {
   category: string;
   department: string;
   isActive: boolean;
+  soldByWeight: boolean;
 }
 
 export interface ProductFormValues {
@@ -29,6 +30,7 @@ export interface ProductFormValues {
   category: string | null;
   department: string | null;
   isActive: boolean;
+  soldByWeight: boolean;
 }
 
 export const emptyProductForm: ProductFormState = {
@@ -42,6 +44,7 @@ export const emptyProductForm: ProductFormState = {
   category: "",
   department: "",
   isActive: true,
+  soldByWeight: false,
 };
 
 export function productToForm(p: Product): ProductFormState {
@@ -56,6 +59,7 @@ export function productToForm(p: Product): ProductFormState {
     category: p.category ?? "",
     department: p.department ?? "",
     isActive: p.isActive,
+    soldByWeight: p.soldByWeight,
   };
 }
 
@@ -102,6 +106,7 @@ export function formToValues(
       category: f.category.trim() || null,
       department: f.department.trim() || null,
       isActive: f.isActive,
+      soldByWeight: f.soldByWeight,
     },
   };
 }
@@ -241,6 +246,21 @@ export function ProductFormFields({
           className={input}
         />
       </div>
+
+      <label className="flex min-h-11 items-start gap-2 text-base font-semibold text-ink">
+        <input
+          type="checkbox"
+          checked={value.soldByWeight}
+          onChange={(e) => onChange({ soldByWeight: e.target.checked })}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+        />
+        <span>
+          Sold by weight (kg)
+          <span className="block text-sm font-normal text-ink-muted">
+            Loose fruit &amp; vegetables only. Price is per kg; the cashier types the weight, e.g. 0.250.
+          </span>
+        </span>
+      </label>
 
       {showActive && (
         <label className="flex min-h-11 items-center gap-2 text-base font-semibold text-ink">

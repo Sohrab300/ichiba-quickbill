@@ -89,6 +89,7 @@ export type Database = {
           product_id: string
           qty: number
           sgst: number
+          sold_by_weight: boolean
           taxable_value: number
           unit_price: number
           uom: string
@@ -109,6 +110,7 @@ export type Database = {
           product_id: string
           qty: number
           sgst: number
+          sold_by_weight?: boolean
           taxable_value: number
           unit_price: number
           uom: string
@@ -129,6 +131,7 @@ export type Database = {
           product_id?: string
           qty?: number
           sgst?: number
+          sold_by_weight?: boolean
           taxable_value?: number
           unit_price?: number
           uom?: string
@@ -319,6 +322,7 @@ export type Database = {
           mrp: number | null
           name: string
           selling_price: number
+          sold_by_weight: boolean
           stock_qty: number
           uom: string
           updated_at: string
@@ -335,6 +339,7 @@ export type Database = {
           mrp?: number | null
           name: string
           selling_price: number
+          sold_by_weight?: boolean
           stock_qty?: number
           uom?: string
           updated_at?: string
@@ -351,6 +356,7 @@ export type Database = {
           mrp?: number | null
           name?: string
           selling_price?: number
+          sold_by_weight?: boolean
           stock_qty?: number
           uom?: string
           updated_at?: string
@@ -497,6 +503,7 @@ export type Database = {
           price_edited: boolean
           qty: number
           sgst: number
+          sold_by_weight: boolean
           taxable_value: number
           unit_price: number
           uom: string
@@ -542,6 +549,7 @@ export type Database = {
           mrp: number | null
           name: string
           selling_price: number
+          sold_by_weight: boolean
           stock_qty: number
           uom: string
           updated_at: string

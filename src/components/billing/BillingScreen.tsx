@@ -4,8 +4,20 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRe
 import { History, Loader2, Trash2 } from "lucide-react";
 import { lookupProduct } from "@/lib/actions";
 import { completeSale, getInvoiceForReprint, type CompleteSaleResult } from "@/lib/invoice-actions";
-import { addBlockedReason, cartReducer, chargedPrice, newIdempotencyKey, previewCart, saveCart, toSaleItems, type CartProduct } from "@/lib/cart";
+import {
+  addBlockedReason,
+  cartReducer,
+  isWeighedRescan,
+  chargedPrice,
+  newIdempotencyKey,
+  previewCart,
+  saveCart,
+  toSaleItems,
+  type CartAction,
+  type CartProduct,
+} from "@/lib/cart";
 import { formatINR } from "@/lib/format";
+import { formatLinesAndPieces } from "@/lib/qty";
 import { playScanErrorTone, playScanSuccessBeep } from "@/lib/audio";
 import { isBrowserOffline, reportRequestFailed, reportRequestSucceeded } from "@/lib/connectivity";
 import { useConnectivity } from "@/components/ConnectionBanner";
@@ -21,6 +33,7 @@ import { Button } from "@/components/ui/Button";
 import { useCart } from "./useCart";
 import { ScanBar, type ScanStatus } from "./ScanBar";
 import { CartTable } from "./CartTable";
+import { qtyDraftProblem, type QtyDraft } from "./QtyInput";
 import { PriceEditPopover } from "./PriceEditPopover";
 import { CheckoutPanel } from "./CheckoutPanel";
 import { MobilePayment, PaymentButtons, PAYMENT_OPTIONS } from "./PaymentButtons";
@@ -71,6 +84,7 @@ function toCartProduct(p: Product): CartProduct {
     gstRate: p.gstRate,
     mrp: p.mrp,
     hsnCode: p.hsnCode,
+    soldByWeight: p.soldByWeight,
   };
 }
 
@@ -106,10 +120,41 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
   /** Phones: payment method toggled on, completed with the Complete button. Reset after each sale. */
   const [mobileMethod, setMobileMethod] = useState<PaymentMethod | null>(null);
 
+  /**
+   * Qty box text that is not settled yet, per product (QtyInput). A line whose draft is invalid
+   * blocks payment until it is fixed (REQUIREMENTS.md section 17). A line's draft is dropped
+   * whenever its qty changes some other way (scan, +/−, remove) and when the cart is replaced.
+   */
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, QtyDraft>>({});
+  const setQtyDraft = useCallback((productId: string, draft: QtyDraft | null) => {
+    setQtyDrafts((prev) => {
+      if (draft === null) {
+        if (!(productId in prev)) return prev;
+        const next = { ...prev };
+        delete next[productId];
+        return next;
+      }
+      const old = prev[productId];
+      return old && old.text === draft.text && old.show === draft.show ? prev : { ...prev, [productId]: draft };
+    });
+  }, []);
+  const invalidQtyItem = cart.items.find((i) => qtyDraftProblem(i, qtyDrafts[i.productId]) !== null);
+  const qtyInvalidRef = useRef(false);
+  useLayoutEffect(() => {
+    qtyInvalidRef.current = invalidQtyItem !== undefined;
+  }, [invalidQtyItem]);
+  // A new cart (sale completed, cleared, discarded, or adopted from another tab) has no drafts.
+  const [draftsKey, setDraftsKey] = useState(cart.idempotencyKey);
+  if (draftsKey !== cart.idempotencyKey) {
+    setDraftsKey(cart.idempotencyKey);
+    setQtyDrafts({});
+  }
+
   // Scanning
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [flash, setFlash] = useState<{ tone: "success" | "error"; seq: number } | null>(null);
-  const [highlight, setHighlight] = useState<{ productId: string; seq: number } | null>(null);
+  /** The last scanned line; focusQty: put the cursor in its qty box (weighed items: type the weight). */
+  const [highlight, setHighlight] = useState<{ productId: string; seq: number; focusQty?: boolean } | null>(null);
   const [lookups, setLookups] = useState(0);
   const seqRef = useRef(0);
   const scanQueue = useRef<Promise<void>>(Promise.resolve());
@@ -195,20 +240,33 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
     const item = toCartProduct(product);
     const blocked = submittingRef.current
       ? "Saving the sale — scan this item again after it finishes."
-      : addBlockedReason(cartRef.current, item.productId);
+      : addBlockedReason(cartRef.current, item);
     if (blocked) {
       rejectScan(blocked);
       return;
     }
     const line = cartRef.current.items.find((i) => i.productId === item.productId);
+    // A weighed item already in the bill: no +1 kg; point at its line so the new weight is typed.
+    const weighedRescan = isWeighedRescan(cartRef.current, item);
     // An edited line keeps its price on a re-scan; say the price it is actually charged at.
     const price = line?.editedPrice !== undefined && line.editedPrice !== item.unitPrice ? chargedPrice(line) : item.unitPrice;
     dispatch({ type: "add", product: item });
+    setQtyDraft(item.productId, null); // the box shows the line's qty again (selected, for weighed items)
     feedback("success");
-    setHighlight({ productId: item.productId, seq: seqRef.current });
+    // Desktop: weighed items get the cursor in their qty box, text selected. Not on phones (it
+    // would pop up the keyboard unasked; the line is scrolled to and flashed instead) or behind an
+    // overlay (camera).
+    const focusQty = item.soldByWeight && !overlayOpenRef.current && !isTouchOnly();
+    setHighlight({ productId: item.productId, seq: seqRef.current, focusQty });
     // The Completed panel stays until the next item is scanned.
     setCompleted(null);
-    setScanStatus({ tone: "success", text: `${verb}: ${product.name} · ${formatINR(price)}` });
+    const where = focusQty ? "in the qty box" : "in its qty box";
+    setScanStatus({
+      tone: "success",
+      text: weighedRescan
+        ? `${product.name} is already in the bill (${formatINR(price)}/kg) — type the new weight ${where}.`
+        : `${verb}: ${product.name} · ${formatINR(price)}${item.soldByWeight ? `/kg — type the weight ${where}` : ""}`,
+    });
   };
 
   const notFound = (code: string) => {
@@ -256,6 +314,12 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
     if (submittingRef.current || !hydrated || !canBill) return;
     const current = cartRef.current;
     if (current.items.length === 0) return;
+    if (!current.pendingSale && qtyInvalidRef.current) {
+      // Belt and braces: the payment buttons and shortcuts are already disabled.
+      setScanStatus({ tone: "error", text: "Fix the quantity marked in red first — the sale was not sent." });
+      playScanErrorTone();
+      return;
+    }
     if (isBrowserOffline()) {
       // Nothing is sent, so nothing can be saved: the cart stays as it is (never "status unknown").
       setScanStatus({
@@ -375,7 +439,8 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           : { kind: "idle" };
 
   const locked = cartLocked;
-  const payDisabled = !hydrated || !canBill || cart.items.length === 0 || locked || offline;
+  const qtyInvalid = invalidQtyItem !== undefined;
+  const payDisabled = !hydrated || !canBill || cart.items.length === 0 || locked || offline || qtyInvalid;
   const lockedReason = !hydrated
     ? "Loading…"
     : submitting
@@ -448,7 +513,16 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
               items={preview.lines}
               highlight={highlight}
               locked={locked}
-              dispatch={dispatch}
+              dispatch={(action: CartAction) => {
+                // +/−/remove change the qty some other way: drop that line's unsettled text.
+                if (action.type === "increment" || action.type === "decrement" || action.type === "remove") {
+                  setQtyDraft(action.productId, null);
+                }
+                dispatch(action);
+              }}
+              qtyDrafts={qtyDrafts}
+              onQtyDraft={setQtyDraft}
+              onScan={enqueueScan}
               onDone={focusScan}
               onEditPrice={(productId, anchor) => {
                 if (submittingRef.current || cartRef.current.pendingSale) return;
@@ -473,7 +547,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
             Print Previous Invoice
           </Button>
           <p className="num ml-auto text-sm font-semibold text-ink-muted">
-            {totals.itemCount} {totals.itemCount === 1 ? "line" : "lines"} · {totals.totalQty} qty
+            {formatLinesAndPieces(totals.itemCount, totals.totalQty)}
           </p>
         </div>
       </section>
@@ -482,10 +556,17 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
       <CheckoutPanel
         totals={totals}
         notice={
-          !canBill && (
+          !canBill ? (
             <Alert tone="warning" size="sm">
               This login has no counter, so it can&apos;t complete sales. Scanning still works for price checks.
             </Alert>
+          ) : (
+            invalidQtyItem &&
+            !locked && (
+              <Alert tone="warning" size="sm">
+                Fix the quantity of <strong>{invalidQtyItem.name}</strong> to complete the sale.
+              </Alert>
+            )
           )
         }
         status={
@@ -524,7 +605,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
             onComplete={() => {
               if (mobileMethod) void submitSale(mobileMethod);
             }}
-            disabled={!hydrated || !canBill || locked}
+            disabled={!hydrated || !canBill || locked || qtyInvalid}
             empty={cart.items.length === 0}
             busy={submitting !== null && !submitting.recheck}
             offline={offline}
@@ -586,7 +667,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           continuous={continuousScan}
           onToggleContinuous={setContinuousScan}
           feedback={scanStatus}
-          summary={`${formatINR(totals.grandTotal)} · ${totals.totalQty} qty`}
+          summary={`${formatINR(totals.grandTotal)} · ${formatLinesAndPieces(totals.itemCount, totals.totalQty)}`}
         />
       )}
 

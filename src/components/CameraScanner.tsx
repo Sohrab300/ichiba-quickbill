@@ -20,7 +20,7 @@ interface CameraScannerProps {
    * camera covers the scan bar where this message normally appears.
    */
   feedback?: { tone: "success" | "error" | "info"; text: string } | null;
-  /** Running bill total, e.g. "₹1,240.00 · 6 qty". */
+  /** Running bill total, e.g. "₹1,240.00 · 3 lines · 6 pcs". */
   summary?: string;
 }
 

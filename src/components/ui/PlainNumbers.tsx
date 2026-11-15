@@ -1,10 +1,10 @@
 import { Fragment } from "react";
 
 /**
- * ₹ amounts and values with a unit (80 mm, 18%, 4 qty) — not bare digit runs, so codes such as
+ * ₹ amounts and values with a unit (80 mm, 18%, 4 qty, 6 pcs, 0.250 kg) — not bare digit runs, so codes such as
  * barcodes or "CL1" inside the same text keep the body font's slashed zero.
  */
-const AMOUNT_OR_QUANTITY = /(₹\s?[\d,]+(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:mm|%|qty)\b|\b\d[\d,]*(?:\.\d+)?%)/g;
+const AMOUNT_OR_QUANTITY = /(₹\s?[\d,]+(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:mm|%|qty|pcs|kg)\b|\b\d[\d,]*(?:\.\d+)?%)/g;
 
 /**
  * Renders a plain string with its amounts/quantities in the `num` face (plain 0, tabular).

@@ -130,6 +130,49 @@ describe("completeSale", () => {
     expect(db.rpc).not.toHaveBeenCalled();
   });
 
+  it("sends weighed quantities to the database as exact 3-decimal JSON numbers", async () => {
+    auth.getStaffContext.mockResolvedValue(mobileCashier);
+    rpcReturns({ data: null, error: { code: "22023", message: "Quantity must be a whole number", details: "", hint: "" } });
+    const other = "0c8f0e4c-5a7e-4d3e-9f39-7b0b2b6d9a12";
+
+    await completeSale({
+      ...input,
+      items: [
+        { productId: input.items[0].productId, qty: ".250" },
+        { productId: other, qty: "999.999", unitPrice: 6000 },
+      ],
+    });
+
+    const items = db.rpc.mock.calls[0][1].p_items;
+    expect(items).toEqual([
+      { product_id: input.items[0].productId, qty: 0.25 },
+      { product_id: other, qty: 999.999, unit_price: 6000 },
+    ]);
+    expect(JSON.stringify(items)).toContain('"qty":0.25}');
+    expect(JSON.stringify(items)).toContain('"qty":999.999,');
+  });
+
+  it("rejects malformed quantities before touching the database (no invoice number used)", async () => {
+    auth.getStaffContext.mockResolvedValue(mobileCashier);
+    for (const qty of ["1.2345", "0.0005", "0", "-1", "", "abc", "10000", 0.25, 0, Number.NaN, null]) {
+      const res = await completeSale({ ...input, items: [{ ...input.items[0], qty: qty as string }] });
+      expect(res, String(qty)).toMatchObject({ success: false, statusCode: 400 });
+    }
+    expect(db.rpc).not.toHaveBeenCalled();
+  });
+
+  it("reads a weighed line back as thousandths and keeps sold_by_weight on the public invoice", async () => {
+    auth.getStaffContext.mockResolvedValue(mobileCashier);
+    const json = invoiceJson({ edited: false });
+    json.total_qty = 0;
+    json.items[0] = { ...json.items[0], qty: 0.25, sold_by_weight: true, unit_price: 32000, line_total: 8000 } as (typeof json.items)[0];
+    rpcReturns({ data: json, error: null });
+    const res = await completeSale({ ...input, items: [{ ...input.items[0], qty: "0.250" }] });
+    expect(res.success).toBe(true);
+    expect(res.data?.items[0]).toMatchObject({ qtyMilli: 250, soldByWeight: true });
+    expect(res.data?.totalQty).toBe(0);
+  });
+
   it("returns the invoice without the price-edit audit fields", async () => {
     auth.getStaffContext.mockResolvedValue(mobileCashier);
     rpcReturns({ data: invoiceJson({ edited: true }), error: null });

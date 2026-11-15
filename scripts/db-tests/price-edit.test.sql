@@ -228,7 +228,7 @@ begin
     jsonb_build_object('product_id', pg_temp.pid('soap'), 'qty', 1),
     jsonb_build_object('product_id', pg_temp.pid('odd'), 'qty', 3, 'unit_price', 150)));
   perform pg_temp.ok('same product, same price twice: merged (qty 5) and edited',
-    jsonb_array_length(v_inv -> 'items') = 2 and (v_inv -> 'items' -> 0 ->> 'qty')::int = 5
+    jsonb_array_length(v_inv -> 'items') = 2 and (v_inv -> 'items' -> 0 ->> 'qty')::numeric = 5
       and (v_inv -> 'items' -> 0 ->> 'unit_price')::int = 150, (v_inv -> 'items')::text);
 
   -- Same product with the catalog price given explicitly once and omitted once: fine.
@@ -236,7 +236,7 @@ begin
     jsonb_build_object('product_id', pg_temp.pid('soap'), 'qty', 1, 'unit_price', 4500),
     jsonb_build_object('product_id', pg_temp.pid('soap'), 'qty', 1)));
   perform pg_temp.ok('catalog price given once and omitted once: merged, not edited',
-    (v_inv -> 'items' -> 0 ->> 'qty')::int = 2 and not (v_inv ->> 'has_price_edit')::boolean);
+    (v_inv -> 'items' -> 0 ->> 'qty')::numeric = 2 and not (v_inv ->> 'has_price_edit')::boolean);
 
   -- No MRP: lowering is allowed.
   v_inv := pg_temp.sale(pg_temp.key(208), jsonb_build_array(jsonb_build_object('product_id', pg_temp.pid('nomrp'), 'qty', 1, 'unit_price', 9000)));

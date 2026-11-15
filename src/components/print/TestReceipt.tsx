@@ -49,6 +49,19 @@ export function TestReceipt({ width, printedAt }: { width: PrintWidth; printedAt
                 <td className="r-num">{receiptAmount(1481400)}</td>
               </tr>
             </tbody>
+            <tbody className="r-line">
+              <tr>
+                <td colSpan={4} className="r-name">
+                  SAMPLE LOOSE ITEM P/KG
+                </td>
+              </tr>
+              <tr>
+                <td />
+                <td className="r-num">999.999 kg</td>
+                <td className="r-num">{receiptAmount(7000)}</td>
+                <td className="r-num">{receiptAmount(6999993)}</td>
+              </tr>
+            </tbody>
           </table>
           <Rule />
           <div className="r-kv r-total">

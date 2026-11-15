@@ -2,6 +2,7 @@
 
 import { HelpCircle, Loader2, Printer, RotateCcw, Plus, X } from "lucide-react";
 import { formatINR } from "@/lib/format";
+import { formatLinesAndPieces } from "@/lib/qty";
 import type { Invoice } from "@/lib/invoice";
 import type { PaymentMethod } from "@/lib/constants";
 import { Alert, InlineAlert } from "@/components/ui/Alert";
@@ -86,7 +87,7 @@ export function SaleStatusPanel(props: SaleStatusPanelProps) {
           <p className="mt-0.5 font-mono text-xl font-bold break-all tabular-nums lg:text-2xl">{invoice.invoiceNo}</p>
           <p className="text-base">
             <span className="num font-bold">{formatINR(invoice.grandTotal)}</span> · {paymentLabel(invoice.paymentMethod)} ·{" "}
-            <span className="num">{invoice.totalQty}</span> {invoice.totalQty === 1 ? "item" : "items"}
+            <span className="num">{formatLinesAndPieces(invoice.itemCount, invoice.totalQty)}</span>
           </p>
         </Alert>
       );

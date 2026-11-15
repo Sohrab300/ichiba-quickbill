@@ -416,6 +416,59 @@ refused.
 
 ---
 
+## Prompt 10 — Fruits & vegetables sold by weight (3-decimal kg quantity)
+
+```text
+Read AGENTS.md and docs/REQUIREMENTS.md sections 3, 6, 13, 16 and section 17 (rewritten — follow it
+exactly; ignore any earlier version of this prompt). Quantities on invoices are integers everywhere
+today (DB, gst.ts, cart, receipts, exports, tests): find every place before changing anything, and
+keep money as integer paise.
+
+1. Database (NEW migration; never edit applied ones):
+   - products: sold_by_weight boolean not null default false.
+   - invoice_items: qty → numeric(10,3); add sold_by_weight boolean not null default false
+     (snapshot). Replace the line_total check with line_total = round(unit_price * qty) (half up);
+     add checks: weighed lines 0.001 <= qty <= 999.999 with at most 3 decimals; other lines integer
+     1..9999. Existing rows must still pass. Keep the immutability triggers working (disable/enable
+     only where needed; fail the migration if any is left disabled).
+   - create_invoice: accept a JSON number qty with up to 3 decimals only for sold_by_weight products,
+     integers only for others (reject 0, negatives, >3 decimals, NaN, strings); snapshot
+     sold_by_weight; line_total in paise half-up, then GST/round-off unchanged. Same product twice:
+     sum qty, one price. Idempotency and price edit (section 16) unchanged.
+   - invoice_json/get_invoice/exports/day totals: qty as a 3-decimal number + sold_by_weight.
+2. One-time flagging: scripts/flag-weighed-items.ts (npm run products:flag-weighed) reads
+   data/weighed-items-review.csv and sets sold_by_weight = true for rows whose last column is Y
+   (by item_code), false is never forced on others. --dry-run prints what changes. Report codes not
+   found. Admin-only "Sold by weight (kg)" checkbox in product add/edit and a small badge in the
+   products list. No bulk-review UI.
+3. Shared code: gst.ts preview must reproduce DB rounding exactly — do weight maths in integers
+   (qty as thousandths), never floats. A shared qty parser (zod) for cart, server action and tests:
+   accepts "0.250", ".250", "1", "2.5"; rejects more than 3 decimals.
+4. Billing (desktop and phone): weighed items add with qty 1 like any item. Their qty box accepts
+   up to 3 decimals (inputMode="decimal"); normal items' qty box stays whole numbers. Show
+   "0.250 kg × ₹120.00/kg" on weighed lines (and "kg" next to the qty). +/− step 1. Invalid qty shows
+   an inline message and blocks payment until fixed. Scanner bursts typed into a qty box go to the
+   scan queue (reuse the price-edit burst logic). Cart in localStorage stores qty as a string or
+   thousandths integer, never a float.
+5. Receipt (58/80mm), invoice detail, CSV exports: "0.250 kg" for weighed lines. Bill summary shows
+   lines and pieces; weighed lines don't add kg to pieces.
+6. Tests: unit tests for qty parsing/rounding (".250", "0.001", "1.005", "999.999", "1000" rejected
+   for weighed, "1.2345" and "0.0005" rejected, decimals rejected on normal items) and preview vs DB
+   parity; DB checks in the local harness (npm run test:db), never production: weighed sale, mixed
+   cart, half-up rounding, invalid qty rejected without using an invoice number, idempotent retry,
+   price edit on a weighed item.
+
+Lint, typecheck, tests (unit + db), build. Give me the migration name and exact commands
+(`npx supabase db push --remote`, then the flag script). Do not run anything that writes invoices to
+production. Do not commit.
+```
+
+**Check:** after the migration and `npm run products:flag-weighed`, as `cl1` scan or type `7011708`
+(TOMATO P/KG) → line shows qty 1 → type `.250` → line shows `0.250 kg × ₹70.00/kg` = ₹17.50 → pay →
+receipt shows `0.250 kg`. On a shampoo, typing `.5` is refused. `1.2345` is refused everywhere.
+
+---
+
 ## Tips for running these
 
 - If Claude Code proposes a plan first, read it. If it disagrees with REQUIREMENTS.md, fix the doc

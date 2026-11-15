@@ -2,7 +2,8 @@ import "server-only";
 
 // Daily CSV exports (REQUIREMENTS.md section 9), streamed from the server page by page.
 // Admin only. Dates are IST days; amounts are rupees with 2 decimals. The price-edit columns
-// (REQUIREMENTS.md section 16) are appended at the end so existing spreadsheets keep their columns.
+// (REQUIREMENTS.md section 16) and then Unit (section 17) are appended at the end so existing
+// spreadsheets keep their columns.
 
 import { connection, type NextRequest } from "next/server";
 import { AuthError, getStaffContext } from "./auth";
@@ -10,6 +11,7 @@ import { createServerClient } from "./supabase/server";
 import type { Database } from "./supabase/database.types";
 import { paymentLabel } from "./constants";
 import { CSV_BOM, csvRow, csvText, paiseToRupees, quoted, type CsvValue } from "./csv";
+import { exportQtyCells } from "./qty";
 import { istDateOf, istDayRange, istTimeOf, parseIstDate, todayIst } from "./ist-date";
 
 export type ExportKind = "summary" | "lines";
@@ -44,7 +46,7 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
   return {
     filename,
     header: [
-      "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Items", "Qty",
+      "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Items", "Pieces",
       "Taxable Value", "CGST", "SGST", "Round Off", "Total", "Edited (Y/N)",
     ],
     async fetchPage(after) {
@@ -83,7 +85,7 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
     header: [
       "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Line", "Item Code",
       "Item Name", "HSN", "UOM", "Qty", "Rate", "MRP", "GST Rate %", "Taxable Value", "CGST", "SGST",
-      "Line Total", "Catalog Price", "Charged Price", "Edited (Y/N)",
+      "Line Total", "Catalog Price", "Charged Price", "Edited (Y/N)", "Unit",
     ],
     async fetchPage(after) {
       const { data, error } = await createServerClient().rpc("invoice_export_lines", {
@@ -98,30 +100,34 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
       if (error) throw rpcError("invoice_export_lines", error);
       return data;
     },
-    toCsv: (r) => [
-      r.invoice_no,
-      istDateOf(r.created_at),
-      istTimeOf(r.created_at),
-      r.counter_code,
-      csvText(r.cashier_name),
-      paymentLabel(r.payment_method),
-      r.line_no,
-      quoted(csvText(r.item_code)),
-      csvText(r.name),
-      quoted(r.hsn_code),
-      csvText(r.uom),
-      r.qty,
-      paiseToRupees(r.unit_price),
-      r.mrp === null ? "" : paiseToRupees(r.mrp),
-      r.gst_rate,
-      paiseToRupees(r.taxable_value),
-      paiseToRupees(r.cgst),
-      paiseToRupees(r.sgst),
-      paiseToRupees(r.line_total),
-      paiseToRupees(r.catalog_price),
-      paiseToRupees(r.unit_price),
-      r.price_edited ? "Y" : "N",
-    ],
+    toCsv: (r) => {
+      const q = exportQtyCells(Number(r.qty), r.sold_by_weight ?? false);
+      return [
+        r.invoice_no,
+        istDateOf(r.created_at),
+        istTimeOf(r.created_at),
+        r.counter_code,
+        csvText(r.cashier_name),
+        paymentLabel(r.payment_method),
+        r.line_no,
+        quoted(csvText(r.item_code)),
+        csvText(r.name),
+        quoted(r.hsn_code),
+        csvText(r.uom),
+        q.qty,
+        paiseToRupees(r.unit_price),
+        r.mrp === null ? "" : paiseToRupees(r.mrp),
+        r.gst_rate,
+        paiseToRupees(r.taxable_value),
+        paiseToRupees(r.cgst),
+        paiseToRupees(r.sgst),
+        paiseToRupees(r.line_total),
+        paiseToRupees(r.catalog_price),
+        paiseToRupees(r.unit_price),
+        r.price_edited ? "Y" : "N",
+        q.unit,
+      ];
+    },
   };
 }
 

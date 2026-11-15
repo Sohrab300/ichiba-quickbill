@@ -1,5 +1,6 @@
 import type { Invoice } from "@/lib/invoice";
 import type { PrintWidth } from "@/lib/print-settings";
+import { formatQtyWithUnit } from "@/lib/qty";
 import { paymentLabel } from "@/components/billing/PaymentButtons";
 
 /**
@@ -122,7 +123,7 @@ function ReceiptCopy({ invoice, width, label, reprint }: InvoiceReceiptProps & {
             </tr>
             <tr>
               <td />
-              <td className="r-num">{item.qty}</td>
+              <td className="r-num">{formatQtyWithUnit(item.qtyMilli, item.soldByWeight)}</td>
               <td className="r-num">{receiptAmount(item.unitPrice)}</td>
               <td className="r-num">{receiptAmount(item.lineTotal)}</td>
             </tr>
@@ -133,7 +134,7 @@ function ReceiptCopy({ invoice, width, label, reprint }: InvoiceReceiptProps & {
       <Rule />
 
       <p>
-        Items {invoice.itemCount} · Qty {invoice.totalQty}
+        Lines {invoice.itemCount} · Pcs {invoice.totalQty}
       </p>
       <Kv label="Sub total" value={receiptAmount(invoice.subtotal)} />
       <Kv label="Round off" value={signedAmount(invoice.roundOff)} />

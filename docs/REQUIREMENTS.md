@@ -278,3 +278,22 @@ into a menu.
   rate, with no edit marker.**
 - Section 6's rule "never trust browser prices" becomes: the server always reads the catalog price
   itself; a browser-sent price is accepted **only** as an explicit price edit within the rules above.
+
+## 17. Items sold by weight (loose fruit & vegetables only)
+
+- Only **fruits & vegetables sold loose by weight** get decimal quantities. Products have a flag
+  `sold_by_weight`. The stock exports don't carry per-item categories, so the flag is set **once**
+  from a reviewed list (`data/weighed-items-review.csv`, rows with `Y`), applied by a script; after
+  that an admin ticks "Sold by weight (kg)" only when adding a new fruit/vegetable. Staff never set it.
+- For flagged items **1 qty = 1 kg**. The line is added with qty `1` like any item; the cashier just
+  types the weight in the qty box, e.g. `.250` (or `0.250`) for 250 g. Up to **3 decimals**,
+  0.001–999.999. +/− still work in steps of 1 kg. **Re-scanning a weighed item already in the
+  bill does not add weight**: on desktop the cursor goes to that line's qty box with the text
+  selected; on phones the line is scrolled into view and highlighted. Normal items still add 1. Normal items stay whole numbers 1–9,999 (a decimal
+  typed on a normal item is refused).
+- `line_total = round(price × qty)` to the nearest paisa (half up), computed in the database; GST is
+  worked out on that line total as section 3. Price edit (section 16) still works.
+- Display on screen, receipt and invoice detail: `0.250 kg`. Lines CSV: `Qty` stays numeric
+  (0.250 / 2) with a last column `Unit` (kg / pcs). Bill summary shows number of
+  lines and pieces; weighed lines count as 1 line each (kg are not added to pieces).
+- No scale integration or price-embedded scale barcodes in this MVP.

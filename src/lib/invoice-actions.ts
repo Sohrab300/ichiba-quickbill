@@ -7,7 +7,8 @@ import { z } from "zod";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { AuthError, getStaffContext } from "./auth";
 import { createServerClient } from "./supabase/server";
-import { MAX_INVOICE_LINES, MAX_LINE_QTY, PAYMENT_METHODS } from "./constants";
+import { MAX_INVOICE_LINES, PAYMENT_METHODS } from "./constants";
+import { qtyMilliToJson, saleQtySchema } from "./qty";
 import { invoiceJsonSchema, toPublicInvoice, type Invoice } from "./invoice";
 import type { ActionResult } from "./actions";
 import { startOfTodayIst, toInvoiceNoSearchTerm } from "./invoice-search";
@@ -29,11 +30,10 @@ const completeSaleSchema = z.object({
     .array(
       z.object({
         productId: z.uuid("Invalid product id"),
-        qty: z
-          .number()
-          .int("Quantity must be a whole number")
-          .min(1, "Quantity must be at least 1")
-          .max(MAX_LINE_QTY, `Quantity cannot exceed ${MAX_LINE_QTY}`),
+        // Text such as "0.250" / "3" (or a whole number), read into integer thousandths. Only the
+        // shape is checked here; create_invoice() allows decimals only for products sold by
+        // weight (REQUIREMENTS.md section 17).
+        qty: saleQtySchema,
         // A per-bill price edit (REQUIREMENTS.md section 16), GST-inclusive paise. Only a request:
         // create_invoice() reads the catalog price and MRP itself and refuses anything outside
         // 0 < price <= MRP.
@@ -144,10 +144,11 @@ export async function completeSale(input: CompleteSaleInput): Promise<CompleteSa
         p_idempotency_key: idempotencyKey,
         p_counter_id: staff.counter.id,
         p_cashier_user_id: staff.userId,
+        // qty as a JSON number with at most 3 decimals (0.25, 3), exactly the parsed value.
         p_items: items.map((i) =>
           i.unitPrice === undefined
-            ? { product_id: i.productId, qty: i.qty }
-            : { product_id: i.productId, qty: i.qty, unit_price: i.unitPrice }
+            ? { product_id: i.productId, qty: qtyMilliToJson(i.qty) }
+            : { product_id: i.productId, qty: qtyMilliToJson(i.qty), unit_price: i.unitPrice }
         ),
         p_payment_method: paymentMethod,
       })

@@ -7,6 +7,7 @@ import { shieldNextClick } from "@/lib/click-shield";
 import { computeLineGst } from "@/lib/gst";
 import { formatINR, paiseToRupeesInput, parseRupeesToPaise } from "@/lib/format";
 import { outsidePress, ScanBurstDetector, type PriceEditMode } from "@/lib/price-edit";
+import { formatQtyWithUnit } from "@/lib/qty";
 import { Button } from "@/components/ui/Button";
 import { fieldBase } from "@/components/ui/Field";
 import { cx } from "@/components/ui/cx";
@@ -158,7 +159,7 @@ export function PriceEditPopover({ item, anchor, onSave, onClose, onScan }: Pric
             Save new price <span className="num">{formatINR(mode.price)}</span>?
           </p>
           <p className="text-sm text-ink-muted">
-            {item.name}: <span className="num">{item.qty}</span> × ={" "}
+            {item.name}: <span className="num">{formatQtyWithUnit(item.qtyMilli, item.soldByWeight)}</span> × ={" "}
             <span className="num font-bold text-ink">
               {formatINR(computeLineGst({ ...item, unitPrice: mode.price }).lineTotal)}
             </span>
@@ -181,7 +182,7 @@ export function PriceEditPopover({ item, anchor, onSave, onClose, onScan }: Pric
           className="space-y-2"
         >
           <label htmlFor={inputId} className="block text-xs font-bold tracking-wide text-ink-muted uppercase">
-            Price on this bill (incl. GST)
+            {item.soldByWeight ? "Price per kg on this bill (incl. GST)" : "Price on this bill (incl. GST)"}
           </label>
           <div className="relative">
             <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-lg font-bold text-ink-muted" aria-hidden>
@@ -206,7 +207,7 @@ export function PriceEditPopover({ item, anchor, onSave, onClose, onScan }: Pric
           <p id={messageId} aria-live="polite" className={cx("min-h-5 text-sm", problem ? "font-semibold text-danger" : "text-ink")}>
             {problem ?? (
               <>
-                <span className="num">{item.qty}</span> × ={" "}
+                <span className="num">{formatQtyWithUnit(item.qtyMilli, item.soldByWeight)}</span> × ={" "}
                 <span className="num font-extrabold">{newAmount !== null ? formatINR(newAmount) : "—"}</span>
               </>
             )}

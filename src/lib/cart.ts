@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { MAX_INVOICE_LINES, MAX_LINE_QTY, PAYMENT_METHODS, type PaymentMethod } from "./constants";
+import { MAX_INVOICE_LINES, PAYMENT_METHODS, type PaymentMethod } from "./constants";
 import { computeInvoiceTotals, type GstLineAmounts, type GstTotals } from "./gst";
+import { formatQty, maxQtyMilli, qtyProblem, QTY_SCALE } from "./qty";
 
 /**
  * The billing cart (REQUIREMENTS.md sections 6 and 8). Pure state + persistence helpers; the
@@ -27,7 +28,13 @@ export interface CartItem {
    */
   editedPrice?: number;
   gstRate: number;
-  qty: number;
+  /**
+   * Integer thousandths (src/lib/qty.ts): 1000 = 1 piece or 1 kg. Always valid for the line:
+   * 1..999999 when soldByWeight, else a multiple of 1000 up to 9,999 pieces.
+   */
+  qtyMilli: number;
+  /** Loose fruit/vegetables priced per kg (products.sold_by_weight at scan time). */
+  soldByWeight: boolean;
   /** Display only. */
   mrp: number | null;
   hsnCode: string | null;
@@ -46,11 +53,12 @@ export interface Cart {
 }
 
 /** What a scan adds. Never carries an edited price, so a re-scan keeps the line's edit. */
-export type CartProduct = Omit<CartItem, "qty" | "editedPrice">;
+export type CartProduct = Omit<CartItem, "qtyMilli" | "editedPrice">;
 
 export type CartAction =
   | { type: "add"; product: CartProduct }
-  | { type: "setQty"; productId: string; qty: number }
+  /** Ignored unless qtyMilli is valid for the line (qtyProblem). */
+  | { type: "setQty"; productId: string; qtyMilli: number }
   | { type: "increment"; productId: string }
   | { type: "decrement"; productId: string }
   | { type: "remove"; productId: string }
@@ -73,14 +81,39 @@ export function newCart(idempotencyKey: string): Cart {
   return { items: [], idempotencyKey, paymentMethod: null, pendingSale: false };
 }
 
+/**
+ * Whether adding `product` again only points at its existing line instead of adding 1: true for
+ * an item sold by weight that is already in the cart (REQUIREMENTS.md section 17 — the cashier
+ * types the new weight; a second bag is not "1 kg more").
+ */
+export function isWeighedRescan(cart: Cart, product: Pick<CartProduct, "productId" | "soldByWeight">): boolean {
+  return product.soldByWeight && cart.items.some((i) => i.productId === product.productId);
+}
+
 /** Why an "add" would be refused, or null if it is allowed. */
-export function addBlockedReason(cart: Cart, productId: string): string | null {
+export function addBlockedReason(cart: Cart, product: Pick<CartProduct, "productId" | "soldByWeight">): string | null {
   if (cart.pendingSale) return "The cart is locked until the sale status is known.";
-  const existing = cart.items.find((i) => i.productId === productId);
+  const existing = cart.items.find((i) => i.productId === product.productId);
   if (existing) {
-    return existing.qty >= MAX_LINE_QTY ? `Quantity cannot exceed ${MAX_LINE_QTY}.` : null;
+    // A re-scan of a normal item adds one more piece, like +; a weighed one changes no qty.
+    if (isWeighedRescan(cart, product)) return null;
+    return canIncrement(existing) ? null : `${existing.name}: quantity cannot go above ${maxQtyText(existing)}.`;
   }
   return cart.items.length >= MAX_INVOICE_LINES ? `A bill can have at most ${MAX_INVOICE_LINES} lines.` : null;
+}
+
+function maxQtyText(item: Pick<CartItem, "soldByWeight">): string {
+  return item.soldByWeight ? `${formatQty(maxQtyMilli(true), true)} kg` : formatQty(maxQtyMilli(false), false);
+}
+
+/** + (and a re-scan) adds 1 piece / 1 kg. */
+export function canIncrement(item: Pick<CartItem, "qtyMilli" | "soldByWeight">): boolean {
+  return item.qtyMilli + QTY_SCALE <= maxQtyMilli(item.soldByWeight);
+}
+
+/** − takes off 1 piece / 1 kg, never down to 0 (0.250 kg stays; remove the line instead). */
+export function canDecrement(item: Pick<CartItem, "qtyMilli">): boolean {
+  return item.qtyMilli > QTY_SCALE;
 }
 
 /** The price this line is charged at, paise. */
@@ -138,11 +171,6 @@ export function previewCart(items: readonly CartItem[]): {
   return { lines: lines.map((line, i) => ({ ...line, unitPrice: items[i].unitPrice })), totals };
 }
 
-function clampQty(qty: number): number {
-  if (!Number.isFinite(qty)) return 1;
-  return Math.min(MAX_LINE_QTY, Math.max(1, Math.trunc(qty)));
-}
-
 function mapItem(cart: Cart, productId: string, fn: (item: CartItem) => CartItem): Cart {
   let changed = false;
   const items = cart.items.map((item) => {
@@ -173,30 +201,40 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
 
   switch (action.type) {
     case "add": {
-      if (addBlockedReason(cart, action.product.productId)) return cart;
+      if (addBlockedReason(cart, action.product)) return cart;
       const { product } = action;
       const exists = cart.items.some((i) => i.productId === product.productId);
       if (exists) {
-        // Same line, one more unit; refresh name/price in case the catalog changed. An edited
+        // Same line; refresh name/price in case the catalog changed. A normal item gets one more
+        // piece; a weighed item keeps its weight (the cashier types the new one). An edited
         // price stays (dropped only if it now equals the catalog price).
         return mapItem(cart, product.productId, (item) => {
-          const next: CartItem = { ...item, ...product, qty: item.qty + 1 };
+          const qtyMilli = product.soldByWeight ? item.qtyMilli : item.qtyMilli + QTY_SCALE;
+          const next: CartItem = { ...item, ...product, qtyMilli };
+          // The product stopped/started being sold by weight since the line was added: a weight
+          // that is not a whole number of pieces cannot stay, so the line starts again at 1.
+          if (qtyProblem(next.qtyMilli, next.soldByWeight) !== null) next.qtyMilli = QTY_SCALE;
           return next.editedPrice === next.unitPrice ? withPrice(next, null) : next;
         });
       }
       // New lines go to the end: the invoice keeps first-scanned order.
-      return { ...cart, items: [...cart.items, { ...product, qty: 1 }] };
+      // Weighed items too: qty 1 (kg), then the cashier types the weight (REQUIREMENTS.md 17).
+      return { ...cart, items: [...cart.items, { ...product, qtyMilli: QTY_SCALE }] };
     }
     case "setQty": {
-      const qty = clampQty(action.qty);
-      return mapItem(cart, action.productId, (item) => (item.qty === qty ? item : { ...item, qty }));
+      const { qtyMilli } = action;
+      return mapItem(cart, action.productId, (item) =>
+        item.qtyMilli === qtyMilli || qtyProblem(qtyMilli, item.soldByWeight) !== null ? item : { ...item, qtyMilli }
+      );
     }
     case "increment":
       return mapItem(cart, action.productId, (item) =>
-        item.qty >= MAX_LINE_QTY ? item : { ...item, qty: item.qty + 1 }
+        canIncrement(item) ? { ...item, qtyMilli: item.qtyMilli + QTY_SCALE } : item
       );
     case "decrement":
-      return mapItem(cart, action.productId, (item) => (item.qty <= 1 ? item : { ...item, qty: item.qty - 1 }));
+      return mapItem(cart, action.productId, (item) =>
+        canDecrement(item) ? { ...item, qtyMilli: item.qtyMilli - QTY_SCALE } : item
+      );
     case "setPrice":
       return mapItem(cart, action.productId, (item) => withPrice(item, action.price));
     case "remove": {
@@ -219,14 +257,16 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
 
 /**
  * The payload completeSale() needs. Catalog prices are never sent (the server reads them itself);
- * unitPrice is sent only for a line whose price was edited on this bill.
+ * unitPrice is sent only for a line whose price was edited on this bill. qty is text ("0.250",
+ * "3"), never a float; the server parses it with the shared qty schema.
  */
-export function toSaleItems(cart: Cart): { productId: string; qty: number; unitPrice?: number }[] {
-  return cart.items.map((i) =>
-    i.editedPrice === undefined
-      ? { productId: i.productId, qty: i.qty }
-      : { productId: i.productId, qty: i.qty, unitPrice: i.editedPrice }
-  );
+export function toSaleItems(cart: Cart): { productId: string; qty: string; unitPrice?: number }[] {
+  return cart.items.map((i) => {
+    const qty = formatQty(i.qtyMilli, i.soldByWeight);
+    return i.editedPrice === undefined
+      ? { productId: i.productId, qty }
+      : { productId: i.productId, qty, unitPrice: i.editedPrice };
+  });
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -239,25 +279,41 @@ export function cartStorageKey(userId: string): string {
   return STORAGE_PREFIX + userId;
 }
 
+/**
+ * A saved line. qty is stored as integer thousandths (qtyMilli), never a float. A cart saved by
+ * the app before weighed items existed has a whole-number `qty` and no soldByWeight; it is read
+ * as qtyMilli = qty × 1000 of a normal item (a re-scan refreshes the flag), so a sale that was
+ * pending across the update can still be checked with its key.
+ */
+const storedItemSchema = z
+  .object({
+    productId: z.string().min(1),
+    itemCode: z.string(),
+    name: z.string(),
+    unitPrice: z.number().int().min(0),
+    editedPrice: z.number().int().min(1).optional(),
+    gstRate: z.number().int().min(0),
+    qtyMilli: z.number().int().optional(),
+    qty: z.number().int().min(1).optional(),
+    soldByWeight: z.boolean().optional(),
+    mrp: z.number().int().nullable().catch(null),
+    hsnCode: z.string().nullable().catch(null),
+  })
+  .transform(({ qty, qtyMilli, soldByWeight, ...rest }, ctx): CartItem => {
+    const milli = qtyMilli ?? (qty === undefined ? Number.NaN : qty * QTY_SCALE);
+    const weighed = soldByWeight ?? false;
+    if (qtyProblem(milli, weighed) !== null) {
+      ctx.addIssue({ code: "custom", message: "Invalid quantity" });
+      return z.NEVER;
+    }
+    return { ...rest, qtyMilli: milli, soldByWeight: weighed };
+  });
+
 const storedCartSchema = z.object({
   idempotencyKey: z.uuid(),
   paymentMethod: z.enum(PAYMENT_METHODS).nullable(),
   pendingSale: z.boolean(),
-  items: z
-    .array(
-      z.object({
-        productId: z.string().min(1),
-        itemCode: z.string(),
-        name: z.string(),
-        unitPrice: z.number().int().min(0),
-        editedPrice: z.number().int().min(1).optional(),
-        gstRate: z.number().int().min(0),
-        qty: z.number().int().min(1).max(MAX_LINE_QTY),
-        mrp: z.number().int().nullable().catch(null),
-        hsnCode: z.string().nullable().catch(null),
-      })
-    )
-    .max(MAX_INVOICE_LINES),
+  items: z.array(storedItemSchema).max(MAX_INVOICE_LINES),
 });
 
 /** Parses a saved cart; null if it is missing or unusable. */

@@ -58,6 +58,8 @@ const productFields = {
   category: optionalText(100, "Category"),
   department: optionalText(100, "Department"),
   isActive: z.boolean(),
+  /** Admin only (product create/edit already require admin). */
+  soldByWeight: z.boolean(),
 };
 
 const sellingWithinMrp = (v: { sellingPrice?: number; mrp?: number | null }) =>
@@ -69,6 +71,7 @@ export const createProductSchema = z
     ...productFields,
     uom: productFields.uom.default("PCS"),
     isActive: productFields.isActive.default(true),
+    soldByWeight: productFields.soldByWeight.default(false),
     /** Optional manufacturer barcode (EAN) to link to the new product. */
     barcode: barcodeSchema.optional().or(z.literal("").transform(() => undefined)),
   })

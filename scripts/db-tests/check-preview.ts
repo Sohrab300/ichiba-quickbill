@@ -1,7 +1,7 @@
 /**
- * Part of scripts/test-db-local.sh: every invoice the throwaway database issued (edited prices
- * included) must match the browser preview (src/lib/gst.ts) computed on the charged prices, and
- * its price-edit flags must agree with the prices.
+ * Part of scripts/test-db-local.sh: every invoice the throwaway database issued (edited prices and
+ * weighed lines included) must match the browser preview (src/lib/gst.ts) computed on the charged
+ * prices and the stored quantities, and its price-edit flags must agree with the prices.
  *
  *   tsx scripts/db-tests/check-preview.ts <invoices.json>   (a JSON array of invoice_json())
  */
@@ -16,6 +16,7 @@ const invoices = z.array(invoiceJsonSchema).parse(JSON.parse(readFileSync(file, 
 
 let failures = 0;
 let edited = 0;
+let weighed = 0;
 for (const inv of invoices) {
   const { lines, totals } = computeInvoiceTotals(inv.items);
   const problems: string[] = [];
@@ -40,6 +41,7 @@ for (const inv of invoices) {
   }
   if (inv.hasPriceEdit !== inv.items.some((i) => i.priceEdited)) problems.push("has_price_edit flag");
   if (inv.hasPriceEdit) edited++;
+  if (inv.items.some((i) => i.soldByWeight && i.qtyMilli % 1000 !== 0)) weighed++;
   if (problems.length) {
     failures++;
     console.log(`  FAIL  ${inv.invoiceNo}\n        ${problems.join("\n        ")}`);
@@ -49,9 +51,13 @@ if (edited === 0) {
   failures++;
   console.log("  FAIL  no invoice with an edited price to compare");
 }
+if (weighed === 0) {
+  failures++;
+  console.log("  FAIL  no invoice with a weighed (decimal kg) line to compare");
+}
 console.log(
   failures
     ? `  ${failures} invoice(s) differ from the preview`
-    : `  PASS  ${invoices.length} invoices (${edited} with edited prices) match the gst.ts preview`
+    : `  PASS  ${invoices.length} invoices (${edited} with edited prices, ${weighed} with decimal kg) match the gst.ts preview`
 );
 process.exit(failures ? 1 : 0);

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addBlockedReason,
   cartReducer,
+  isWeighedRescan,
   chargedPrice,
   maxEditPrice,
   newCart,
@@ -15,8 +16,8 @@ import {
   type CartAction,
   type CartProduct,
 } from "./cart";
-import { MAX_LINE_QTY } from "./constants";
 import { computeLineGst } from "./gst";
+import { MAX_PIECES_MILLI, MAX_WEIGHT_MILLI } from "./qty";
 
 const KEY = "11111111-1111-4111-8111-111111111111";
 const NEXT = "22222222-2222-4222-8222-222222222222";
@@ -29,9 +30,22 @@ const soap: CartProduct = {
   gstRate: 18,
   mrp: 5000,
   hsnCode: "3401",
+  soldByWeight: false,
 };
 const oil: CartProduct = { ...soap, productId: "aaaaaaaa-0000-4000-8000-000000000002", itemCode: "1000002", name: "Oil" };
 const noMrp: CartProduct = { ...soap, productId: "aaaaaaaa-0000-4000-8000-000000000003", itemCode: "1000003", name: "Loose", mrp: null };
+/** ₹70.00 per kg, sold by weight. */
+const tomato: CartProduct = {
+  ...soap,
+  productId: "aaaaaaaa-0000-4000-8000-000000000004",
+  itemCode: "7011708",
+  name: "TOMATO P/KG",
+  unitPrice: 7000,
+  gstRate: 0,
+  mrp: null,
+  hsnCode: "0702",
+  soldByWeight: true,
+};
 
 function cartWith(...products: CartProduct[]): Cart {
   return products.reduce((c, product) => cartReducer(c, { type: "add", product }), newCart(KEY));
@@ -40,28 +54,29 @@ function cartWith(...products: CartProduct[]): Cart {
 describe("cartReducer", () => {
   it("adds new lines at the end and merges repeats", () => {
     const cart = cartWith(soap, oil, soap);
-    expect(cart.items.map((i) => [i.name, i.qty])).toEqual([
-      ["Soap", 2],
-      ["Oil", 1],
+    expect(cart.items.map((i) => [i.name, i.qtyMilli])).toEqual([
+      ["Soap", 2000],
+      ["Oil", 1000],
     ]);
     expect(cart.idempotencyKey).toBe(KEY);
   });
 
   it("refreshes the price when a product is scanned again", () => {
     const cart = cartReducer(cartWith(soap), { type: "add", product: { ...soap, unitPrice: 4700 } });
-    expect(cart.items[0]).toMatchObject({ unitPrice: 4700, qty: 2 });
+    expect(cart.items[0]).toMatchObject({ unitPrice: 4700, qtyMilli: 2000 });
   });
 
-  it("clamps quantities to 1..MAX_LINE_QTY and never removes on decrement", () => {
+  it("keeps quantities within 1..9,999, ignores invalid ones and never removes on decrement", () => {
     let cart = cartWith(soap);
     cart = cartReducer(cart, { type: "decrement", productId: soap.productId });
-    expect(cart.items[0].qty).toBe(1);
-    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qty: 0 });
-    expect(cart.items[0].qty).toBe(1);
-    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qty: 1e9 });
-    expect(cart.items[0].qty).toBe(MAX_LINE_QTY);
+    expect(cart.items[0].qtyMilli).toBe(1000);
+    for (const qtyMilli of [0, -1000, 1500, 250, 1e12, Number.NaN, 2.5]) {
+      expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli })).toBe(cart);
+    }
+    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: MAX_PIECES_MILLI });
+    expect(cart.items[0].qtyMilli).toBe(MAX_PIECES_MILLI);
     expect(cartReducer(cart, { type: "increment", productId: soap.productId })).toBe(cart);
-    expect(addBlockedReason(cart, soap.productId)).toMatch(/cannot exceed/);
+    expect(addBlockedReason(cart, soap)).toMatch(/cannot go above 9999/);
   });
 
   it("gives a cleared cart a new key", () => {
@@ -75,13 +90,13 @@ describe("cartReducer", () => {
     for (const action of [
       { type: "add", product: oil },
       { type: "increment", productId: soap.productId },
-      { type: "setQty", productId: soap.productId, qty: 5 },
+      { type: "setQty", productId: soap.productId, qtyMilli: 5000 },
       { type: "remove", productId: soap.productId },
       { type: "clear", nextKey: NEXT },
     ] as const) {
       expect(cartReducer(sent, action)).toBe(sent);
     }
-    expect(addBlockedReason(sent, oil.productId)).toMatch(/locked/);
+    expect(addBlockedReason(sent, oil)).toMatch(/locked/);
   });
 
   it("keeps items and key after a definite failure", () => {
@@ -118,11 +133,104 @@ describe("cartReducer", () => {
     expect(cartReducer(empty, { type: "saleSent", paymentMethod: "cash" })).toBe(empty);
   });
 
-  it("sends only product ids and quantities", () => {
+  it("sends only product ids and quantities (as text, never floats)", () => {
     expect(toSaleItems(cartWith(soap, soap, oil))).toEqual([
-      { productId: soap.productId, qty: 2 },
-      { productId: oil.productId, qty: 1 },
+      { productId: soap.productId, qty: "2" },
+      { productId: oil.productId, qty: "1" },
     ]);
+  });
+});
+
+describe("sold by weight", () => {
+  it("adds a weighed item with qty 1 (kg) like any item; the weight is then typed", () => {
+    let cart = cartWith(tomato);
+    expect(cart.items[0]).toMatchObject({ qtyMilli: 1000, soldByWeight: true });
+    cart = cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 250 });
+    expect(cart.items[0].qtyMilli).toBe(250);
+    const { lines, totals } = previewCart(cart.items);
+    expect(lines[0].lineTotal).toBe(1750); // 0.250 kg × ₹70.00
+    expect(totals).toMatchObject({ itemCount: 1, totalQty: 0, subtotal: 1750, grandTotal: 1800 });
+    expect(toSaleItems(cart)).toEqual([{ productId: tomato.productId, qty: "0.250" }]);
+  });
+
+  it("refuses a decimal qty on a normal item, and weights out of range", () => {
+    const cart = cartWith(soap, tomato);
+    expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 500 })).toBe(cart);
+    expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 0 })).toBe(cart);
+    expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: MAX_WEIGHT_MILLI + 1 })).toBe(cart);
+    expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: MAX_WEIGHT_MILLI }).items[1].qtyMilli).toBe(
+      MAX_WEIGHT_MILLI
+    );
+  });
+
+  it("+/− step 1 kg; − never goes to 0 or below", () => {
+    let cart = cartReducer(cartWith(tomato), { type: "setQty", productId: tomato.productId, qtyMilli: 1250 });
+    cart = cartReducer(cart, { type: "increment", productId: tomato.productId });
+    expect(cart.items[0].qtyMilli).toBe(2250);
+    cart = cartReducer(cart, { type: "decrement", productId: tomato.productId });
+    cart = cartReducer(cart, { type: "decrement", productId: tomato.productId });
+    expect(cart.items[0].qtyMilli).toBe(250);
+    expect(cartReducer(cart, { type: "decrement", productId: tomato.productId })).toBe(cart);
+    const full = cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 999_500 });
+    expect(cartReducer(full, { type: "increment", productId: tomato.productId })).toBe(full);
+    // A re-scan never adds weight, so it is never blocked by the maximum.
+    expect(addBlockedReason(full, tomato)).toBeNull();
+  });
+
+  it("a re-scan of a weighed item keeps its weight (no +1 kg) and refreshes the price", () => {
+    let cart = cartReducer(cartWith(soap, tomato), { type: "setQty", productId: tomato.productId, qtyMilli: 250 });
+    expect(isWeighedRescan(cart, tomato)).toBe(true);
+    expect(isWeighedRescan(cart, soap)).toBe(false);
+    cart = cartReducer(cart, { type: "add", product: { ...tomato, unitPrice: 7200 } });
+    expect(cart.items[1]).toMatchObject({ qtyMilli: 250, unitPrice: 7200 });
+    expect(cart.items).toHaveLength(2);
+    // Normal items still add 1.
+    cart = cartReducer(cart, { type: "add", product: soap });
+    expect(cart.items[0].qtyMilli).toBe(2000);
+    // An edited per-kg price survives the re-scan.
+    cart = cartReducer(cart, { type: "setPrice", productId: tomato.productId, price: 6000 });
+    cart = cartReducer(cart, { type: "add", product: tomato });
+    expect(cart.items[1]).toMatchObject({ qtyMilli: 250, editedPrice: 6000 });
+  });
+
+  it("a line whose product stopped being weighed restarts at 1; one that became weighed keeps its qty", () => {
+    let cart = cartReducer(cartWith(tomato), { type: "setQty", productId: tomato.productId, qtyMilli: 1250 });
+    cart = cartReducer(cart, { type: "add", product: { ...tomato, soldByWeight: false } });
+    expect(cart.items[0]).toMatchObject({ qtyMilli: 1000, soldByWeight: false });
+    const pieces = cartWith(soap, soap, soap);
+    expect(cartReducer(pieces, { type: "add", product: { ...soap, soldByWeight: true } }).items[0]).toMatchObject({
+      qtyMilli: 3000,
+      soldByWeight: true,
+    });
+  });
+
+  it("counts weighed lines as lines, not pieces; price edit is per kg", () => {
+    let cart = cartWith(soap, soap, tomato);
+    cart = cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 1500 });
+    cart = cartReducer(cart, { type: "setPrice", productId: tomato.productId, price: 6000 });
+    const { lines, totals } = previewCart(cart.items);
+    expect(lines[1]).toMatchObject({ unitPrice: 7000, editedPrice: 6000, lineTotal: 9000 });
+    expect(totals).toMatchObject({ itemCount: 2, totalQty: 2, subtotal: 18000 });
+    expect(toSaleItems(cart)).toEqual([
+      { productId: soap.productId, qty: "2" },
+      { productId: tomato.productId, qty: "1.500", unitPrice: 6000 },
+    ]);
+  });
+
+  it("saves qty as thousandths and restores it", () => {
+    const cart = cartReducer(cartWith(soap, tomato), { type: "setQty", productId: tomato.productId, qtyMilli: 250 });
+    const json = JSON.parse(JSON.stringify(cart)) as { items: Record<string, unknown>[] };
+    expect(json.items[1]).toMatchObject({ qtyMilli: 250, soldByWeight: true });
+    expect(json.items[1]).not.toHaveProperty("qty");
+    expect(parseStoredCart(JSON.stringify(cart))).toEqual(cart);
+  });
+
+  it("refuses a saved cart with a qty its line can't have", () => {
+    const cart = cartWith(soap, tomato);
+    const bad = (item: Record<string, unknown>) => JSON.stringify({ ...cart, items: [item] });
+    expect(parseStoredCart(bad({ ...cart.items[0], qtyMilli: 1500 }))).toBeNull(); // decimal on a normal item
+    expect(parseStoredCart(bad({ ...cart.items[1], qtyMilli: 0.25 }))).toBeNull(); // a float
+    expect(parseStoredCart(bad({ ...cart.items[1], qtyMilli: 1_000_000 }))).toBeNull();
   });
 });
 
@@ -131,7 +239,7 @@ describe("price edit (one bill only)", () => {
 
   it("charges the edited price for the whole line and keeps the catalog price", () => {
     const cart = cartReducer(cartWith(soap, soap, oil), setPrice(soap.productId, 4000));
-    expect(cart.items[0]).toMatchObject({ unitPrice: 4500, editedPrice: 4000, qty: 2 });
+    expect(cart.items[0]).toMatchObject({ unitPrice: 4500, editedPrice: 4000, qtyMilli: 2000 });
     expect(chargedPrice(cart.items[0])).toBe(4000);
     expect(cart.items[1].editedPrice).toBeUndefined();
     expect(chargedPrice(cart.items[1])).toBe(4500);
@@ -176,7 +284,7 @@ describe("price edit (one bill only)", () => {
   it("keeps the edit when the product is scanned again, and drops it with the line", () => {
     let cart = cartReducer(cartWith(soap), setPrice(soap.productId, 4000));
     cart = cartReducer(cart, { type: "add", product: soap });
-    expect(cart.items[0]).toMatchObject({ qty: 2, editedPrice: 4000 });
+    expect(cart.items[0]).toMatchObject({ qtyMilli: 2000, editedPrice: 4000 });
     // Catalog price changed to the edited price: no longer an edit.
     expect(cartReducer(cart, { type: "add", product: { ...soap, unitPrice: 4000 } }).items[0]).not.toHaveProperty("editedPrice");
     cart = cartReducer(cart, { type: "remove", productId: soap.productId });
@@ -192,8 +300,8 @@ describe("price edit (one bill only)", () => {
   it("sends unitPrice only for edited lines", () => {
     const cart = cartReducer(cartWith(soap, oil, oil), setPrice(oil.productId, 3999));
     expect(toSaleItems(cart)).toEqual([
-      { productId: soap.productId, qty: 1 },
-      { productId: oil.productId, qty: 2, unitPrice: 3999 },
+      { productId: soap.productId, qty: "1" },
+      { productId: oil.productId, qty: "2", unitPrice: 3999 },
     ]);
   });
 
@@ -203,7 +311,7 @@ describe("price edit (one bill only)", () => {
     const { lines, totals } = previewCart(cart.items);
     expect(lines[0]).toMatchObject({ unitPrice: 4500, editedPrice: 4000, lineTotal: 12000, taxableValue: 10169, cgst: 915, sgst: 916 });
     expect(lines[1]).toMatchObject({ unitPrice: 4500, lineTotal: 4500 });
-    expect(lines[1]).toMatchObject(computeLineGst({ unitPrice: 4500, gstRate: 18, qty: 1 }));
+    expect(lines[1]).toMatchObject(computeLineGst({ unitPrice: 4500, gstRate: 18, qtyMilli: 1000 }));
     expect(totals).toMatchObject({ itemCount: 2, totalQty: 4, subtotal: 16500, grandTotal: 16500, roundOff: 0 });
 
     const odd = previewCart(cartReducer(cartWith(soap), setPrice(soap.productId, 4333)).items);
@@ -230,11 +338,24 @@ describe("persistence", () => {
     expect(parseStoredCart(JSON.stringify(old))?.items[0]).not.toHaveProperty("editedPrice");
   });
 
+  it("reads carts saved before weighed items existed (whole qty, no flag), also while pending", () => {
+    const { qtyMilli: _q, soldByWeight: _w, ...rest } = cartWith(soap).items[0];
+    void _q;
+    void _w;
+    const old = { idempotencyKey: KEY, paymentMethod: "cash", pendingSale: true, items: [{ ...rest, qty: 3 }] };
+    const restored = parseStoredCart(JSON.stringify(old));
+    expect(restored?.items[0]).toMatchObject({ qtyMilli: 3000, soldByWeight: false });
+    expect(restored?.pendingSale).toBe(true);
+    expect(toSaleItems(restored!)).toEqual([{ productId: soap.productId, qty: "3" }]);
+  });
+
   it("rejects junk", () => {
     expect(parseStoredCart(null)).toBeNull();
     expect(parseStoredCart("{")).toBeNull();
     expect(parseStoredCart(JSON.stringify({ ...cartWith(soap), idempotencyKey: "nope" }))).toBeNull();
     expect(parseStoredCart(JSON.stringify({ ...cartWith(soap), items: [{ ...soap, qty: 0 }] }))).toBeNull();
+    expect(parseStoredCart(JSON.stringify({ ...cartWith(soap), items: [{ ...soap, qtyMilli: 0 }] }))).toBeNull();
+    expect(parseStoredCart(JSON.stringify({ ...cartWith(soap), items: [{ ...soap }] }))).toBeNull(); // no qty at all
     expect(parseStoredCart(JSON.stringify(newCart(KEY)))).toBeNull();
     expect(parseStoredCart(JSON.stringify({ ...cartWith(soap), items: [{ ...soap, qty: 1, editedPrice: 0 }] }))).toBeNull();
   });

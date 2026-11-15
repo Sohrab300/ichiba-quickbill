@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PAYMENT_METHODS } from "./constants";
+import { qtyMilliFromNumber } from "./qty";
 
 /**
  * The invoice as returned by the create_invoice() / get_invoice() RPCs (public.invoice_json()),
@@ -16,6 +17,15 @@ const paise = z.number().int();
 // Plain strings, not z.uuid(): this parses a response for a sale that is already committed, so it
 // must not reject anything the database legitimately produced.
 const id = z.string().min(1);
+/** numeric(10,3) as a JSON number (0.250, 2.000) -> integer thousandths (250, 2000). */
+const qtyMilli = z.number().transform((qty, ctx) => {
+  const milli = qtyMilliFromNumber(qty);
+  if (milli === null) {
+    ctx.addIssue({ code: "custom", message: `Unreadable quantity ${qty}` });
+    return z.NEVER;
+  }
+  return milli;
+});
 
 const invoiceItemJson = z
   .object({
@@ -31,7 +41,9 @@ const invoiceItemJson = z
     price_edited: z.boolean().optional(),
     mrp: paise.nullable(),
     gst_rate: z.number().int(),
-    qty: z.number().int(),
+    qty: qtyMilli,
+    // Optional only so a response from before the sold-by-weight migration still parses.
+    sold_by_weight: z.boolean().optional(),
     line_total: paise,
     taxable_value: paise,
     cgst: paise,
@@ -52,7 +64,9 @@ const invoiceItemJson = z
     priceEdited: r.price_edited ?? false,
     mrp: r.mrp,
     gstRate: r.gst_rate,
-    qty: r.qty,
+    /** Thousandths (src/lib/qty.ts): kg when soldByWeight, else pieces × 1000. */
+    qtyMilli: r.qty,
+    soldByWeight: r.sold_by_weight ?? false,
     lineTotal: r.line_total,
     taxableValue: r.taxable_value,
     cgst: r.cgst,
@@ -123,6 +137,7 @@ export const invoiceJsonSchema = z
     cashierName: r.cashier_name,
     paymentMethod: r.payment_method,
     itemCount: r.item_count,
+    /** Pieces: qty of the lines not sold by weight (kg are not counted). */
     totalQty: r.total_qty,
     subtotal: r.subtotal,
     taxableTotal: r.taxable_total,

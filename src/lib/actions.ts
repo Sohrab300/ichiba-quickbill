@@ -205,6 +205,7 @@ export async function createProduct(input: CreateProductInput): Promise<ActionRe
         category: v.category ?? null,
         department: v.department ?? null,
         is_active: v.isActive,
+        sold_by_weight: v.soldByWeight,
       })
       .select()
       .single();
@@ -254,6 +255,7 @@ export async function updateProduct(
     if (v.category !== undefined) payload.category = v.category;
     if (v.department !== undefined) payload.department = v.department;
     if (v.isActive !== undefined) payload.is_active = v.isActive;
+    if (v.soldByWeight !== undefined) payload.sold_by_weight = v.soldByWeight;
     if (Object.keys(payload).length === 0) return fail("Nothing to update", 400);
 
     const supabase = createServerClient();

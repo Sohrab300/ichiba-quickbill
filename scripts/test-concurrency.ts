@@ -310,7 +310,7 @@ async function main() {
       const merged = new Map<string, number>();
       for (const it of r.items) merged.set(it.product_id, (merged.get(it.product_id) ?? 0) + it.qty);
       const expected = JSON.stringify([...merged.entries()]);
-      const got = JSON.stringify(inv.items.map((it) => [it.productId, it.qty]));
+      const got = JSON.stringify(inv.items.map((it) => [it.productId, it.qtyMilli / 1000])); // whole pieces here
       if (expected !== got) contentProblems.push(`${inv.invoiceNo}: lines ${got} ≠ ${expected}`);
       if (inv.counterId !== counters[r.counter].id) contentProblems.push(`${inv.invoiceNo}: wrong counter`);
       if (inv.cashierUserId !== cashiers[r.counter]) contentProblems.push(`${inv.invoiceNo}: wrong cashier`);
@@ -320,7 +320,9 @@ async function main() {
         if (priceOf.get(it.productId) !== it.unitPrice) contentProblems.push(`${inv.invoiceNo}: ${it.itemCode} price not from products`);
       }
 
-      const { lines, totals } = computeInvoiceTotals(inv.items.map((it) => ({ unitPrice: it.unitPrice, gstRate: it.gstRate, qty: it.qty })));
+      const { lines, totals } = computeInvoiceTotals(
+        inv.items.map((it) => ({ unitPrice: it.unitPrice, gstRate: it.gstRate, qtyMilli: it.qtyMilli, soldByWeight: it.soldByWeight }))
+      );
       const dbTotals = {
         itemCount: inv.itemCount,
         totalQty: inv.totalQty,

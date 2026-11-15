@@ -234,6 +234,11 @@ export default function ProductCatalog({
                     <td className="py-3.5 px-4 align-top">
                       <div className="flex flex-wrap items-center gap-2 font-bold text-ink">
                         {product.name}
+                        {product.soldByWeight && (
+                          <Badge tone="ink" title="Sold by weight: price per kg, qty in kg with up to 3 decimals">
+                            Per kg
+                          </Badge>
+                        )}
                         {!product.isActive && (
                           <Badge>Inactive</Badge>
                         )}
