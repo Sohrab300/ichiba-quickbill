@@ -34,8 +34,8 @@ function BillSummary({ totals }: { totals: GstTotals }) {
         </Badge>
       </div>
       <dl>
-        {/* Weighed lines count as lines; their kg are not added to pieces. */}
-        <Row label="Items" value={formatLinesAndPieces(totals.itemCount, totals.totalQty)} />
+        {/* Weighed lines count as lines; their kg are not added to pieces. Pieces may be fractional. */}
+        <Row label="Items" value={formatLinesAndPieces(totals.itemCount, totals.totalQtyMilli)} />
         <Row label="Sub total" value={formatINR(totals.subtotal)} strong />
         <Row label="Taxable value" value={formatINR(totals.taxableTotal)} />
         <Row label="CGST" value={formatINR(totals.cgstTotal)} />
@@ -103,7 +103,7 @@ export function CheckoutPanel({ totals, status, notice, payment, mobilePayment, 
         >
           <span>
             <span className="block text-xs font-bold tracking-wide text-ink-muted uppercase">
-              Total · <span className="num">{formatLinesAndPieces(totals.itemCount, totals.totalQty)}</span>
+              Total · <span className="num">{formatLinesAndPieces(totals.itemCount, totals.totalQtyMilli)}</span>
             </span>
             <span className="text-sm font-semibold text-ink underline decoration-ink/40 underline-offset-2">
               {showDetails ? "Hide" : "Show"} GST preview

@@ -204,7 +204,7 @@ into a menu.
 
 - Rounding: an exact half paisa of taxable value rounds up; bill total rounds half-up to the rupee
   (round-off between −₹0.49 and +₹0.50).
-- Limits: qty is a whole number 1–9,999 per product; max 500 lines per bill; repeated products merge
+- Limits: qty up to 3 decimals, 0.001–9,999 per product (weighed: 0.001–999.999 kg; see section 17); max 500 lines per bill; repeated products merge
   into one line in first-scanned order.
 - The database itself checks that the cashier bills only on the counter in their profile.
 - Re-sending an idempotency key returns the original invoice unchanged (checked before items); the same
@@ -279,21 +279,25 @@ into a menu.
 - Section 6's rule "never trust browser prices" becomes: the server always reads the catalog price
   itself; a browser-sent price is accepted **only** as an explicit price edit within the rules above.
 
-## 17. Items sold by weight (loose fruit & vegetables only)
+## 17. Decimal quantities (all products) and items sold by weight
 
-- Only **fruits & vegetables sold loose by weight** get decimal quantities. Products have a flag
-  `sold_by_weight`. The stock exports don't carry per-item categories, so the flag is set **once**
-  from a reviewed list (`data/weighed-items-review.csv`, rows with `Y`), applied by a script; after
-  that an admin ticks "Sold by weight (kg)" only when adding a new fruit/vegetable. Staff never set it.
-- For flagged items **1 qty = 1 kg**. The line is added with qty `1` like any item; the cashier just
-  types the weight in the qty box, e.g. `.250` (or `0.250`) for 250 g. Up to **3 decimals**,
-  0.001–999.999. +/− still work in steps of 1 kg. **Re-scanning a weighed item already in the
-  bill does not add weight**: on desktop the cursor goes to that line's qty box with the text
-  selected; on phones the line is scrolled into view and highlighted. Normal items still add 1. Normal items stay whole numbers 1–9,999 (a decimal
-  typed on a normal item is refused).
-- `line_total = round(price × qty)` to the nearest paisa (half up), computed in the database; GST is
-  worked out on that line total as section 3. Price edit (section 16) still works.
-- Display on screen, receipt and invoice detail: `0.250 kg`. Lines CSV: `Qty` stays numeric
-  (0.250 / 2) with a last column `Unit` (kg / pcs). Bill summary shows number of
-  lines and pieces; weighed lines count as 1 line each (kg are not added to pieces).
+- **Every product** accepts a quantity with up to **3 decimals** (0.001–9,999.000), e.g. `0.5`,
+  `.250`, `2.75`. Decided by the store owner: staff will use it carefully.
+- Products still have the flag `sold_by_weight` (loose fruit & vegetables), set once from
+  `data/weighed-items-review.csv` and afterwards by an admin for new items. The flag only changes
+  how a line behaves and looks, not what is allowed:
+  - weighed items: unit **kg**, shown `0.250 kg × ₹120.00/kg`; qty box focused after scanning on
+    desktop; **re-scanning does not add weight** (desktop selects the qty box; phone highlights the
+    line). Max 999.999 kg.
+  - other items: unit **pcs**, shown `0.5 pcs` only when fractional (whole numbers look as before);
+    re-scanning adds 1.
+- **Safety net (admin only):** any non-weighed line with a fractional qty marks the bill
+  `has_fractional_qty`. Admins see a "Fraction" tag in Invoices, an "Fractional qty only" filter, the
+  line highlighted on the invoice detail, and a Y/N column in exports. Cashiers never see the tag;
+  receipts show no marker.
+- `line_total = round(price × qty)` to the nearest paisa (half up), in the database; GST on that line
+  total as section 3. Price edit (section 16) unchanged.
+- Bill summary shows number of lines; pieces = sum of qty of non-weighed lines (may be fractional,
+  shown with up to 3 decimals). Lines CSV: `Qty` numeric (0.250 / 2 / 0.5) plus last column `Unit`
+  (kg / pcs).
 - No scale integration or price-embedded scale barcodes in this MVP.

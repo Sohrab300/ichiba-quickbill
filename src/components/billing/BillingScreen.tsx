@@ -547,7 +547,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
             Print Previous Invoice
           </Button>
           <p className="num ml-auto text-sm font-semibold text-ink-muted">
-            {formatLinesAndPieces(totals.itemCount, totals.totalQty)}
+            {formatLinesAndPieces(totals.itemCount, totals.totalQtyMilli)}
           </p>
         </div>
       </section>
@@ -667,7 +667,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           continuous={continuousScan}
           onToggleContinuous={setContinuousScan}
           feedback={scanStatus}
-          summary={`${formatINR(totals.grandTotal)} · ${formatLinesAndPieces(totals.itemCount, totals.totalQty)}`}
+          summary={`${formatINR(totals.grandTotal)} · ${formatLinesAndPieces(totals.itemCount, totals.totalQtyMilli)}`}
         />
       )}
 

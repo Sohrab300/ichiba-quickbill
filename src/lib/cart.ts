@@ -29,8 +29,8 @@ export interface CartItem {
   editedPrice?: number;
   gstRate: number;
   /**
-   * Integer thousandths (src/lib/qty.ts): 1000 = 1 piece or 1 kg. Always valid for the line:
-   * 1..999999 when soldByWeight, else a multiple of 1000 up to 9,999 pieces.
+   * Integer thousandths (src/lib/qty.ts): 1000 = 1 piece or 1 kg, 500 = 0.5 pcs. Always valid for
+   * the line: 1..999999 when soldByWeight, else 1..9999000 (pieces, may be fractional).
    */
   qtyMilli: number;
   /** Loose fruit/vegetables priced per kg (products.sold_by_weight at scan time). */
@@ -106,12 +106,15 @@ function maxQtyText(item: Pick<CartItem, "soldByWeight">): string {
   return item.soldByWeight ? `${formatQty(maxQtyMilli(true), true)} kg` : formatQty(maxQtyMilli(false), false);
 }
 
-/** + (and a re-scan) adds 1 piece / 1 kg. */
+/** + (and a re-scan of a normal item) adds 1 piece / 1 kg: 0.5 -> 1.5. */
 export function canIncrement(item: Pick<CartItem, "qtyMilli" | "soldByWeight">): boolean {
   return item.qtyMilli + QTY_SCALE <= maxQtyMilli(item.soldByWeight);
 }
 
-/** − takes off 1 piece / 1 kg, never down to 0 (0.250 kg stays; remove the line instead). */
+/**
+ * − takes off 1 piece / 1 kg, never down to 0 or below: a whole qty stops at 1, 2.5 -> 1.5 -> 0.5,
+ * and 0.5 pcs / 0.250 kg can't go lower (remove the line instead).
+ */
 export function canDecrement(item: Pick<CartItem, "qtyMilli">): boolean {
   return item.qtyMilli > QTY_SCALE;
 }
@@ -206,14 +209,16 @@ export function cartReducer(cart: Cart, action: CartAction): Cart {
       const exists = cart.items.some((i) => i.productId === product.productId);
       if (exists) {
         // Same line; refresh name/price in case the catalog changed. A normal item gets one more
-        // piece; a weighed item keeps its weight (the cashier types the new one). An edited
-        // price stays (dropped only if it now equals the catalog price).
+        // piece (0.5 -> 1.5); a weighed item keeps its weight (the cashier types the new one). An
+        // edited price stays (dropped only if it now equals the catalog price).
         return mapItem(cart, product.productId, (item) => {
           const qtyMilli = product.soldByWeight ? item.qtyMilli : item.qtyMilli + QTY_SCALE;
           const next: CartItem = { ...item, ...product, qtyMilli };
-          // The product stopped/started being sold by weight since the line was added: a weight
-          // that is not a whole number of pieces cannot stay, so the line starts again at 1.
-          if (qtyProblem(next.qtyMilli, next.soldByWeight) !== null) next.qtyMilli = QTY_SCALE;
+          // The product stopped being sold by weight since the line was added: its kg mean
+          // nothing as pieces, so the line starts again at 1. One that became weighed keeps its
+          // qty as kg unless that is over the weight maximum.
+          const stoppedWeighed = item.soldByWeight && !product.soldByWeight;
+          if (stoppedWeighed || qtyProblem(next.qtyMilli, next.soldByWeight) !== null) next.qtyMilli = QTY_SCALE;
           return next.editedPrice === next.unitPrice ? withPrice(next, null) : next;
         });
       }
@@ -283,7 +288,7 @@ export function cartStorageKey(userId: string): string {
  * A saved line. qty is stored as integer thousandths (qtyMilli), never a float. A cart saved by
  * the app before weighed items existed has a whole-number `qty` and no soldByWeight; it is read
  * as qtyMilli = qty × 1000 of a normal item (a re-scan refreshes the flag), so a sale that was
- * pending across the update can still be checked with its key.
+ * pending across the update can still be checked with its key. Every product may be fractional.
  */
 const storedItemSchema = z
   .object({

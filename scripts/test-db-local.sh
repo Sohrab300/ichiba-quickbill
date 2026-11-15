@@ -8,7 +8,9 @@
 # 2. add the few Supabase objects the migrations expect (roles anon/authenticated/service_role,
 #    auth.users, schema extensions);
 # 3. apply supabase/migrations/* older than FIXTURE_BEFORE, load scripts/db-tests/fixtures.sql
-#    (so later migrations run against existing invoices, like production), apply the rest;
+#    (so later migrations run against existing invoices, like production), then the same with
+#    fixtures-before-decimal-qty.sql before DECIMAL_FIXTURE_BEFORE (weighed and edited invoices
+#    issued by the older create_invoice), and apply the rest;
 # 4. run every scripts/db-tests/*.test.sql, then scripts/db-tests/check-preview.ts (invoice
 #    numbers from the database vs. the browser preview in src/lib/gst.ts).
 # The cluster is stopped and deleted on exit. Needs the Postgres server binaries (Postgres.app
@@ -18,6 +20,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 FIXTURE_BEFORE=20261115300000 # first migration that should see pre-existing invoices
+DECIMAL_FIXTURE_BEFORE=20261115500000 # first migration that should see weighed / edited invoices
 
 find_pg_bin() {
   if [[ -n ${PG_BIN:-} ]]; then echo "$PG_BIN"; return; fi
@@ -67,6 +70,7 @@ apply() {
 }
 
 fixtures_loaded=false
+decimal_fixtures_loaded=false
 for f in "$ROOT"/supabase/migrations/*.sql; do
   name=$(basename "$f")
   if ! $fixtures_loaded && [[ ${name%%_*} -ge $FIXTURE_BEFORE ]]; then
@@ -74,9 +78,15 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
     psql_run -f "$ROOT/scripts/db-tests/fixtures.sql" >/dev/null
     fixtures_loaded=true
   fi
+  if ! $decimal_fixtures_loaded && [[ ${name%%_*} -ge $DECIMAL_FIXTURE_BEFORE ]]; then
+    echo "  fixtures (weighed / edited invoices before decimal qty)"
+    psql_run -f "$ROOT/scripts/db-tests/fixtures-before-decimal-qty.sql" >/dev/null
+    decimal_fixtures_loaded=true
+  fi
   apply "$f"
 done
 if ! $fixtures_loaded; then psql_run -f "$ROOT/scripts/db-tests/fixtures.sql" >/dev/null; fi
+if ! $decimal_fixtures_loaded; then psql_run -f "$ROOT/scripts/db-tests/fixtures-before-decimal-qty.sql" >/dev/null; fi
 
 status=0
 for t in "$ROOT"/scripts/db-tests/*.test.sql; do

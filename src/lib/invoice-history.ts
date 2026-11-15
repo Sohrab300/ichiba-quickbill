@@ -29,13 +29,16 @@ export interface InvoiceFilters {
   /** 1-based. */
   page: number;
   /**
-   * Admins only: price edits are visible (REQUIREMENTS.md section 16) — the "Edited" tag, the
-   * edited-bills count and the "Edited only" filter. Always false for cashiers, so the edit flag
-   * is never even read from the database for them.
+   * Admins only: the audit flags are visible — price edits (REQUIREMENTS.md section 16: the
+   * "Edited" tag, the edited-bills count, the "Edited only" filter) and fractional piece
+   * quantities (section 17: the "Fraction" tag and the "Fractional qty only" filter). Always false
+   * for cashiers, so these flags are never even read from the database for them.
    */
-  showPriceEdits: boolean;
+  showAudit: boolean;
   /** Admins only: list only bills with an edited price (?edited=1). */
   editedOnly: boolean;
+  /** Admins only: list only bills with a fractional qty on a line not sold by weight (?fraction=1). */
+  fractionOnly: boolean;
   /** true for cashiers: date and counter are fixed to today and their own counter. */
   locked: boolean;
   /**
@@ -74,8 +77,9 @@ export function resolveInvoiceFilters(staff: StaffContext, params: RawParams, co
       counter: own ? { id: own.id, code: own.code, isActive: true } : null,
       search,
       page,
-      showPriceEdits: false,
+      showAudit: false,
       editedOnly: false,
+      fractionOnly: false,
       locked: true,
       allDates: false,
     };
@@ -87,8 +91,9 @@ export function resolveInvoiceFilters(staff: StaffContext, params: RawParams, co
     counter: counters.find((c) => c.code === code) ?? null,
     search,
     page,
-    showPriceEdits: true,
+    showAudit: true,
     editedOnly: first(params.edited) === "1",
+    fractionOnly: first(params.fraction) === "1",
     locked: false,
     allDates: search !== "",
   };
@@ -96,7 +101,7 @@ export function resolveInvoiceFilters(staff: StaffContext, params: RawParams, co
 
 /** Query string for these filters (page omitted when 1), for links that keep them. */
 export function filtersQuery(
-  f: Pick<InvoiceFilters, "date" | "counter" | "search" | "page" | "locked" | "editedOnly">,
+  f: Pick<InvoiceFilters, "date" | "counter" | "search" | "page" | "locked" | "editedOnly" | "fractionOnly">,
   page = f.page
 ): string {
   const q = new URLSearchParams();
@@ -104,6 +109,7 @@ export function filtersQuery(
     q.set("date", f.date);
     if (f.counter) q.set("counter", f.counter.code);
     if (f.editedOnly) q.set("edited", "1");
+    if (f.fractionOnly) q.set("fraction", "1");
   }
   if (f.search) q.set("q", f.search);
   if (page > 1) q.set("page", String(page));
@@ -126,6 +132,8 @@ export interface InvoiceListRow {
   grandTotal: number;
   /** Admins only (undefined for cashiers): the bill has an edited price. */
   hasPriceEdit?: boolean;
+  /** Admins only (undefined for cashiers): a line not sold by weight has a fractional qty. */
+  hasFractionalQty?: boolean;
 }
 
 export interface InvoiceListPage {
@@ -144,8 +152,11 @@ const listRow = z.object({
   item_count: z.number().int(),
   grand_total: z.number().int(),
   has_price_edit: z.boolean().optional(),
+  has_fractional_qty: z.boolean().optional(),
 });
 
+/** Admins only. */
+const AUDIT_COLUMNS = "has_price_edit, has_fractional_qty";
 const LIST_COLUMNS = "id, invoice_no, created_at, counter_code, cashier_name, payment_method, item_count, grand_total";
 
 /**
@@ -158,7 +169,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
 
   let query = createServerClient()
     .from("invoices")
-    .select(f.showPriceEdits ? `${LIST_COLUMNS}, has_price_edit` : LIST_COLUMNS, { count: "exact" })
+    .select(f.showAudit ? `${LIST_COLUMNS}, ${AUDIT_COLUMNS}` : LIST_COLUMNS, { count: "exact" })
     .order("created_at", { ascending: false })
     .order("invoice_no", { ascending: false })
     .range(offset, offset + INVOICES_PAGE_SIZE - 1);
@@ -169,7 +180,8 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
   if (f.counter) query = query.eq("counter_id", f.counter.id);
   // toInvoiceNoSearchTerm() leaves only [A-Z0-9/-], so no LIKE wildcards get through.
   if (f.search) query = query.ilike("invoice_no", `%${f.search}%`);
-  if (f.showPriceEdits && f.editedOnly) query = query.eq("has_price_edit", true);
+  if (f.showAudit && f.editedOnly) query = query.eq("has_price_edit", true);
+  if (f.showAudit && f.fractionOnly) query = query.eq("has_fractional_qty", true);
 
   const { data, error, count } = await query;
   if (error) {
@@ -188,7 +200,9 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
       paymentMethod: r.payment_method,
       itemCount: r.item_count,
       grandTotal: r.grand_total,
-      ...(f.showPriceEdits ? { hasPriceEdit: r.has_price_edit ?? false } : {}),
+      ...(f.showAudit
+        ? { hasPriceEdit: r.has_price_edit ?? false, hasFractionalQty: r.has_fractional_qty ?? false }
+        : {}),
     })),
   };
 }
@@ -230,10 +244,10 @@ const totalsRow = z.object({
  * them), so they match the daily-summary export for the same date and counter.
  */
 export async function getDayTotals(
-  f: Pick<InvoiceFilters, "date" | "counter" | "locked" | "showPriceEdits">
+  f: Pick<InvoiceFilters, "date" | "counter" | "locked" | "showAudit">
 ): Promise<DayTotals> {
   const byPaymentMethod = { cash: { ...ZERO }, upi: { ...ZERO }, card: { ...ZERO } };
-  const day: DayTotals = { ...ZERO, byPaymentMethod, editedCount: f.showPriceEdits ? 0 : null };
+  const day: DayTotals = { ...ZERO, byPaymentMethod, editedCount: f.showAudit ? 0 : null };
   if (f.locked && !f.counter) return day;
 
   const { from, to } = istDayRange(f.date);
@@ -290,7 +304,8 @@ export type HistoryInvoice =
 /**
  * The invoice for the history detail page, or null when it does not exist or this login may not
  * see it (admins: any; cashiers: their own counter, today — the same scope as the list).
- * Admins get the price-edit audit fields; for cashiers they are removed here, on the server.
+ * Admins get the audit fields (price edit, fraction flag); for cashiers they are removed here, on
+ * the server.
  */
 export async function getInvoiceForHistory(staff: StaffContext, invoiceId: string): Promise<HistoryInvoice | null> {
   if (!z.uuid().safeParse(invoiceId).success) return null;

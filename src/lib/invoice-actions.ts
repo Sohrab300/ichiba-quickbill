@@ -30,9 +30,9 @@ const completeSaleSchema = z.object({
     .array(
       z.object({
         productId: z.uuid("Invalid product id"),
-        // Text such as "0.250" / "3" (or a whole number), read into integer thousandths. Only the
-        // shape is checked here; create_invoice() allows decimals only for products sold by
-        // weight (REQUIREMENTS.md section 17).
+        // Text such as "0.250" / "0.5" / "3" (or a whole number), read into integer thousandths:
+        // at most 3 decimals, 0.001–9,999, for every product. create_invoice() re-checks it and
+        // also applies the 999.999 kg maximum to products sold by weight (REQUIREMENTS.md 17).
         qty: saleQtySchema,
         // A per-bill price edit (REQUIREMENTS.md section 16), GST-inclusive paise. Only a request:
         // create_invoice() reads the catalog price and MRP itself and refuses anything outside

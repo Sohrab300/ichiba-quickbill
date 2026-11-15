@@ -325,7 +325,7 @@ async function main() {
       );
       const dbTotals = {
         itemCount: inv.itemCount,
-        totalQty: inv.totalQty,
+        totalQtyMilli: inv.totalQtyMilli,
         subtotal: inv.subtotal,
         taxableTotal: inv.taxableTotal,
         cgstTotal: inv.cgstTotal,

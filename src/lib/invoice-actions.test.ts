@@ -170,7 +170,21 @@ describe("completeSale", () => {
     const res = await completeSale({ ...input, items: [{ ...input.items[0], qty: "0.250" }] });
     expect(res.success).toBe(true);
     expect(res.data?.items[0]).toMatchObject({ qtyMilli: 250, soldByWeight: true });
-    expect(res.data?.totalQty).toBe(0);
+    expect(res.data?.totalQtyMilli).toBe(0);
+  });
+
+  it("sends a fractional piece qty (0.5 pcs) and hides has_fractional_qty from the cashier", async () => {
+    auth.getStaffContext.mockResolvedValue(mobileCashier);
+    const json = { ...invoiceJson({ edited: false }), total_qty: 0.5, has_fractional_qty: true };
+    json.items[0] = { ...json.items[0], qty: 0.5, sold_by_weight: false, unit_price: 16000, line_total: 8000 } as (typeof json.items)[0];
+    rpcReturns({ data: json, error: null });
+    const res = await completeSale({ ...input, items: [{ ...input.items[0], qty: "0.5" }] });
+    expect(db.rpc.mock.calls.at(-1)?.[1].p_items).toEqual([{ product_id: input.items[0].productId, qty: 0.5 }]);
+    expect(res.success).toBe(true);
+    expect(res.data).toMatchObject({ totalQtyMilli: 500, items: [{ qtyMilli: 500, soldByWeight: false }] });
+    const sent = JSON.parse(JSON.stringify(res.data));
+    expect(sent).not.toHaveProperty("hasFractionalQty");
+    expect(JSON.stringify(res)).not.toMatch(/fraction/i);
   });
 
   it("returns the invoice without the price-edit audit fields", async () => {

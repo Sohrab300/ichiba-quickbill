@@ -1,4 +1,5 @@
--- Items sold by weight (REQUIREMENTS.md section 17) — database checks. Run with
+-- Items sold by weight (REQUIREMENTS.md section 17) — database checks, as of the latest
+-- create_invoice (decimals on normal items: see decimal-qty.test.sql). Run with
 -- scripts/test-db-local.sh (throwaway local Postgres). Creates products and invoices, so it refuses
 -- to run anywhere else.
 
@@ -90,8 +91,9 @@ begin
   perform pg_temp.ok('schema: invoice_items.qty is numeric(10,3)',
     (select format_type(atttypid, atttypmod) = 'numeric(10,3)'
        from pg_attribute where attrelid = 'public.invoice_items'::regclass and attname = 'qty'));
-  perform pg_temp.ok('schema: products.sold_by_weight defaults to false (only the 4 test products flagged)',
-    (select count(*) filter (where sold_by_weight) = 4 from public.products));
+  perform pg_temp.ok('schema: products.sold_by_weight defaults to false (fixtures.sql products unflagged)',
+    (select count(*) = 5 and not bool_or(sold_by_weight) from public.products
+      where id::text like '00000000-0000-4000-8000-00000000a00_' and id::text <> '00000000-0000-4000-8000-00000000a006'));
   perform pg_temp.ok('existing lines: not weighed, whole qty, line_total = round(price × qty)',
     (select count(*) >= 3
             and bool_and(not it.sold_by_weight and it.qty = trunc(it.qty) and it.line_total = it.unit_price * it.qty)
@@ -99,7 +101,8 @@ begin
        join public.invoices i on i.id = it.invoice_id
       where i.idempotency_key in ('00000000-0000-4000-8000-0000000b0001', '00000000-0000-4000-8000-0000000b0002')));
   perform pg_temp.ok('existing invoices: total_qty still their piece count',
-    (select bool_and(i.total_qty = (select sum(qty) from public.invoice_items it where it.invoice_id = i.id))
+    (select bool_and(i.total_qty = (select coalesce(sum(qty) filter (where not sold_by_weight), 0)
+                                      from public.invoice_items it where it.invoice_id = i.id))
        from public.invoices i));
   perform pg_temp.ok('immutability: all four triggers enabled',
     (select count(*) = 4 from pg_trigger where tgname like '%immutable%' and tgenabled = 'O'));
@@ -135,9 +138,7 @@ begin
       ('weighed qty as a string "0.250"',       jsonb_build_array(pg_temp.line('tomato', '"0.250"')),      'numeric qty'),
       ('weighed qty "NaN"',                     jsonb_build_array(pg_temp.line('tomato', '"NaN"')),        'numeric qty'),
       ('weighed qty null',                      jsonb_build_array(pg_temp.line('tomato', 'null')),         'numeric qty'),
-      ('normal item qty 1.5',                   jsonb_build_array(pg_temp.line('soap', '1.5')),            'whole number'),
-      ('normal item qty 0.5 + 0.5 (sums to 1)', jsonb_build_array(pg_temp.line('soap', '0.5'), pg_temp.line('soap', '0.5')),
-                                                                                                           'whole number'),
+      ('normal item qty 9999.5',                jsonb_build_array(pg_temp.line('soap', '9999.5')),         'cannot exceed 9999'),
       ('normal item qty 1.2345',                jsonb_build_array(pg_temp.line('soap', '1.2345')),         'at most 3 decimals'),
       ('normal item qty 10000',                 jsonb_build_array(pg_temp.line('soap', '10000')),          'cannot exceed 9999'),
       ('one bad weighed line refuses the bill', jsonb_build_array(pg_temp.line('soap', '2'), pg_temp.line('tomato', '0.0001')),
@@ -172,7 +173,7 @@ begin
   perform pg_temp.ok('weighed sale: qty is the 3-decimal number 0.250 and sold_by_weight is true',
     (v_line -> 'qty')::text = '0.250' and (v_line ->> 'sold_by_weight')::boolean, v_line::text);
   perform pg_temp.ok('weighed sale: 1 line, 0 pieces, round-off to ₹18',
-    (v_inv ->> 'item_count')::int = 1 and (v_inv ->> 'total_qty')::int = 0
+    (v_inv ->> 'item_count')::int = 1 and (v_inv ->> 'total_qty')::numeric = 0
       and (v_inv ->> 'grand_total')::bigint = 1800 and (v_inv ->> 'round_off')::int = 50, v_inv::text);
   perform pg_temp.ok('weighed sale: stored qty 0.250, snapshot sold_by_weight',
     (select qty = 0.250 and sold_by_weight from public.invoice_items
@@ -222,7 +223,7 @@ begin
       and (v_inv -> 'items' -> 1 ->> 'line_total')::bigint = 10500
       and (v_inv -> 'items' -> 2 ->> 'line_total')::bigint = 9259      -- 12345 × 0.75 = 9258.75
       and (v_inv ->> 'subtotal')::bigint = 33259 and (v_inv ->> 'grand_total')::bigint = 33300
-      and (v_inv ->> 'total_qty')::int = 3, v_inv::text);
+      and (v_inv ->> 'total_qty')::numeric = 3, v_inv::text);
 
   -- Idempotent retry: same key, different items -> the original invoice, no new number.
   v_before := pg_temp.cl1_last_number();
@@ -256,9 +257,13 @@ declare
 begin
   update public.products set sold_by_weight = false where id = pg_temp.pid('tomato')::uuid;
   v_err := pg_temp.sale_error(pg_temp.key(1101), jsonb_build_array(pg_temp.line('tomato', '0.250')));
-  perform pg_temp.ok('flag cleared: decimal qty refused for that product', v_err like '22023 %whole number%', v_err);
+  perform pg_temp.ok('flag cleared: decimal qty still sold, now as pieces (fraction flagged)',
+    v_err is null and (select not it.sold_by_weight and it.qty = 0.250 and i.has_fractional_qty and i.total_qty = 0.250
+                         from public.invoices i join public.invoice_items it on it.invoice_id = i.id
+                        where i.idempotency_key = pg_temp.key(1101)), v_err);
   perform pg_temp.ok('flag cleared: earlier invoice lines keep sold_by_weight = true',
-    (select bool_and(sold_by_weight) from public.invoice_items where product_id = pg_temp.pid('tomato')::uuid));
+    (select bool_and(it.sold_by_weight) from public.invoice_items it join public.invoices i on i.id = it.invoice_id
+      where it.product_id = pg_temp.pid('tomato')::uuid and i.idempotency_key <> pg_temp.key(1101)));
   update public.products set sold_by_weight = true where id = pg_temp.pid('tomato')::uuid;
 end;
 $$;
@@ -287,8 +292,12 @@ $$;
 
 do $$
 begin
-  perform pg_temp.ok('constraint: normal line with qty 1.5 refused',
-    pg_temp.insert_line_error(1.5, false, 100, 150) = 'invoice_items_qty_whole');
+  perform pg_temp.ok('constraint: normal line with qty 1.5 passes (150 = 100 × 1.5)',
+    pg_temp.insert_line_error(1.5, false, 100, 150) is null);
+  perform pg_temp.ok('constraint: normal line with qty 0 refused',
+    pg_temp.insert_line_error(0, false, 100, 0) = 'invoice_items_qty_pieces');
+  perform pg_temp.ok('constraint: normal line above 9999 refused',
+    pg_temp.insert_line_error(9999.001, false, 1, 9999) = 'invoice_items_qty_pieces');
   perform pg_temp.ok('constraint: weighed line with qty 0 refused',
     pg_temp.insert_line_error(0, true, 100, 0) = 'invoice_items_qty_weighed');
   perform pg_temp.ok('constraint: weighed line above 999.999 kg refused',

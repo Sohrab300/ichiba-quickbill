@@ -1,7 +1,8 @@
 /**
  * Part of scripts/test-db-local.sh: every invoice the throwaway database issued (edited prices and
- * weighed lines included) must match the browser preview (src/lib/gst.ts) computed on the charged
- * prices and the stored quantities, and its price-edit flags must agree with the prices.
+ * weighed lines and fractional pieces included) must match the browser preview (src/lib/gst.ts)
+ * computed on the charged prices and the stored quantities; its price-edit flags must agree with
+ * the prices and has_fractional_qty with the stored lines.
  *
  *   tsx scripts/db-tests/check-preview.ts <invoices.json>   (a JSON array of invoice_json())
  */
@@ -9,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { computeInvoiceTotals } from "../../src/lib/gst";
 import { invoiceJsonSchema } from "../../src/lib/invoice";
+import { isFractionalPieces } from "../../src/lib/qty";
 
 const file = process.argv[2];
 if (!file) throw new Error("usage: check-preview.ts <invoices.json>");
@@ -17,6 +19,7 @@ const invoices = z.array(invoiceJsonSchema).parse(JSON.parse(readFileSync(file, 
 let failures = 0;
 let edited = 0;
 let weighed = 0;
+let fractional = 0;
 for (const inv of invoices) {
   const { lines, totals } = computeInvoiceTotals(inv.items);
   const problems: string[] = [];
@@ -28,7 +31,7 @@ for (const inv of invoices) {
     if (item.priceEdited !== (item.unitPrice !== item.catalogPrice)) problems.push(`line ${item.lineNo}: price_edited flag`);
   });
   const db = {
-    totalQty: inv.totalQty,
+    totalQtyMilli: inv.totalQtyMilli,
     subtotal: inv.subtotal,
     taxableTotal: inv.taxableTotal,
     cgstTotal: inv.cgstTotal,
@@ -42,6 +45,8 @@ for (const inv of invoices) {
   if (inv.hasPriceEdit !== inv.items.some((i) => i.priceEdited)) problems.push("has_price_edit flag");
   if (inv.hasPriceEdit) edited++;
   if (inv.items.some((i) => i.soldByWeight && i.qtyMilli % 1000 !== 0)) weighed++;
+  if (inv.hasFractionalQty !== inv.items.some(isFractionalPieces)) problems.push("has_fractional_qty flag");
+  if (inv.hasFractionalQty) fractional++;
   if (problems.length) {
     failures++;
     console.log(`  FAIL  ${inv.invoiceNo}\n        ${problems.join("\n        ")}`);
@@ -55,9 +60,13 @@ if (weighed === 0) {
   failures++;
   console.log("  FAIL  no invoice with a weighed (decimal kg) line to compare");
 }
+if (fractional === 0) {
+  failures++;
+  console.log("  FAIL  no invoice with fractional pieces to compare");
+}
 console.log(
   failures
     ? `  ${failures} invoice(s) differ from the preview`
-    : `  PASS  ${invoices.length} invoices (${edited} with edited prices, ${weighed} with decimal kg) match the gst.ts preview`
+    : `  PASS  ${invoices.length} invoices (${edited} with edited prices, ${weighed} with decimal kg, ${fractional} with fractional pieces) match the gst.ts preview`
 );
 process.exit(failures ? 1 : 0);

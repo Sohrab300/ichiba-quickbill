@@ -6,18 +6,20 @@ import { qtyMilliFromNumber } from "./qty";
  * The invoice as returned by the create_invoice() / get_invoice() RPCs (public.invoice_json()),
  * converted to camelCase. All amounts are integer paise. Safe to import from client components.
  *
- * Two shapes (REQUIREMENTS.md section 16):
- * - AuditedInvoice: everything, including the price-edit audit fields (catalog price per line,
- *   price_edited, has_price_edit). Server-side only: admin history, detail page, tests.
- * - Invoice: what the browser and the receipts get — the charged prices only, with no trace of an
- *   edit. Every invoice a Server Action returns goes through toPublicInvoice().
+ * Two shapes (REQUIREMENTS.md sections 16 and 17):
+ * - AuditedInvoice: everything, including the admin-only audit fields (catalog price per line,
+ *   price_edited, has_price_edit, has_fractional_qty). Server-side only: admin history, detail
+ *   page, tests.
+ * - Invoice: what the browser and the receipts get — the charged prices and quantities only, with
+ *   no trace of an edit or a fraction flag. Every invoice a Server Action returns goes through
+ *   toPublicInvoice().
  */
 
 const paise = z.number().int();
 // Plain strings, not z.uuid(): this parses a response for a sale that is already committed, so it
 // must not reject anything the database legitimately produced.
 const id = z.string().min(1);
-/** numeric(10,3) as a JSON number (0.250, 2.000) -> integer thousandths (250, 2000). */
+/** numeric(…,3) as a JSON number (0.250, 2.000) -> integer thousandths (250, 2000). */
 const qtyMilli = z.number().transform((qty, ctx) => {
   const milli = qtyMilliFromNumber(qty);
   if (milli === null) {
@@ -104,7 +106,8 @@ export const invoiceJsonSchema = z
     cashier_name: z.string(),
     payment_method: z.enum(PAYMENT_METHODS),
     item_count: z.number().int(),
-    total_qty: z.number().int(),
+    // numeric(12,3) since 20261115500000 (integer before; both read the same).
+    total_qty: qtyMilli,
     subtotal: paise,
     taxable_total: paise,
     cgst_total: paise,
@@ -112,6 +115,8 @@ export const invoiceJsonSchema = z
     round_off: paise,
     grand_total: paise,
     has_price_edit: z.boolean().optional(),
+    // Optional only so a response from before the decimal-qty migration still parses.
+    has_fractional_qty: z.boolean().optional(),
     created_at: z.string(),
     store: z.object({
       legal_name: z.string(),
@@ -137,8 +142,8 @@ export const invoiceJsonSchema = z
     cashierName: r.cashier_name,
     paymentMethod: r.payment_method,
     itemCount: r.item_count,
-    /** Pieces: qty of the lines not sold by weight (kg are not counted). */
-    totalQty: r.total_qty,
+    /** Pieces in thousandths: qty of the lines not sold by weight (kg are not counted). */
+    totalQtyMilli: r.total_qty,
     subtotal: r.subtotal,
     taxableTotal: r.taxable_total,
     cgstTotal: r.cgst_total,
@@ -147,6 +152,8 @@ export const invoiceJsonSchema = z
     grandTotal: r.grand_total,
     /** At least one line has an edited price. Audit only. */
     hasPriceEdit: r.has_price_edit ?? false,
+    /** A line not sold by weight has a fractional qty (0.5 pcs). Audit only. */
+    hasFractionalQty: r.has_fractional_qty ?? false,
     /** ISO timestamp (UTC); display in Asia/Kolkata. */
     createdAt: r.created_at,
     store: {
@@ -166,17 +173,18 @@ export type AuditedInvoice = z.output<typeof invoiceJsonSchema>;
 export type AuditedInvoiceItem = AuditedInvoice["items"][number];
 
 type AuditItemField = "catalogPrice" | "priceEdited";
+type AuditInvoiceField = "hasPriceEdit" | "hasFractionalQty";
 export type InvoiceItem = Omit<AuditedInvoiceItem, AuditItemField>;
-export type Invoice = Omit<AuditedInvoice, "hasPriceEdit" | "items"> & { items: InvoiceItem[] };
+export type Invoice = Omit<AuditedInvoice, AuditInvoiceField | "items"> & { items: InvoiceItem[] };
 export type InvoiceTaxSummaryRow = Invoice["taxSummary"][number];
 
 /**
- * The invoice without its price-edit audit fields, as new objects (a Server Action serialises
- * every own property, so the fields must be gone, not just untyped). The receipt is the same
- * either way: it prints only the charged rate.
+ * The invoice without its audit fields (price edit, fraction flag), as new objects (a Server
+ * Action serialises every own property, so the fields must be gone, not just untyped). The
+ * receipt is the same either way: it prints only the charged rate and the qty.
  */
 export function toPublicInvoice(invoice: AuditedInvoice): Invoice {
-  const out: Invoice & Partial<Pick<AuditedInvoice, "hasPriceEdit">> = {
+  const out: Invoice & Partial<Pick<AuditedInvoice, AuditInvoiceField>> = {
     ...invoice,
     items: invoice.items.map((item) => {
       const copy: InvoiceItem & Partial<Pick<AuditedInvoiceItem, AuditItemField>> = { ...item };
@@ -186,5 +194,6 @@ export function toPublicInvoice(invoice: AuditedInvoice): Invoice {
     }),
   };
   delete out.hasPriceEdit;
+  delete out.hasFractionalQty;
   return out;
 }

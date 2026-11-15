@@ -12,7 +12,7 @@ import { cx } from "@/components/ui/cx";
 import { requireStaffForPage } from "@/lib/auth";
 import { paymentLabel } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
-import { formatLinesAndPieces, formatQty } from "@/lib/qty";
+import { formatLinesAndPieces, formatQty, isFractionalPieces } from "@/lib/qty";
 import type { AuditedInvoice, Invoice } from "@/lib/invoice";
 import { getInvoiceForHistory, type HistoryInvoice } from "@/lib/invoice-history";
 import { toInvoiceNoSearchTerm } from "@/lib/invoice-search";
@@ -53,6 +53,7 @@ function backHref(sp: Record<string, string | string[] | undefined>): string {
   const page = Number(one(sp.page));
   if (Number.isInteger(page) && page > 1 && page <= 10_000) q.set("page", String(page));
   if (one(sp.edited) === "1") q.set("edited", "1"); // ignored for cashiers by the list page
+  if (one(sp.fraction) === "1") q.set("fraction", "1"); // likewise
   const s = q.toString();
   return `/invoices${s ? `?${s}` : ""}`;
 }
@@ -110,12 +111,15 @@ function InvoiceView({
   printWidthMm,
 }: {
   invoice: Invoice;
-  /** The same invoice with its price-edit fields; null for cashiers. */
+  /** The same invoice with its audit fields (price edit, fraction flag); null for cashiers. */
   audit: AuditedInvoice | null;
   printWidthMm: 58 | 80 | null;
 }) {
   const edited = audit?.hasPriceEdit === true;
   const editedLines = new Map((audit?.items ?? []).filter((it) => it.priceEdited).map((it) => [it.lineNo, it]));
+  // Admins only: lines not sold by weight with a fractional qty (REQUIREMENTS.md section 17).
+  const fractional = audit?.hasFractionalQty === true;
+  const fractionLines = new Set(audit ? invoice.items.filter(isFractionalPieces).map((it) => it.lineNo) : []);
   const facts = [
     { label: "Date & time (IST)", value: dateTimeFormat.format(new Date(invoice.createdAt)), num: true },
     { label: "Counter", value: invoice.counterCode },
@@ -131,6 +135,7 @@ function InvoiceView({
             <p className="flex items-center gap-2 text-xs font-bold tracking-wide text-brand uppercase">
               Tax invoice
               {edited && <Badge tone="warning">Edited</Badge>}
+              {fractional && <Badge tone="warning">Fraction</Badge>}
             </p>
             <h1 className="font-mono text-2xl font-extrabold break-all tabular-nums sm:text-3xl">{invoice.invoiceNo}</h1>
           </div>
@@ -151,13 +156,20 @@ function InvoiceView({
 
       <section aria-labelledby="lines-heading" className="space-y-2">
         <h2 id="lines-heading" className="text-lg font-bold">
-          Items <span className="num text-sm font-normal text-ink-muted">({formatLinesAndPieces(invoice.itemCount, invoice.totalQty)})</span>
+          Items <span className="num text-sm font-normal text-ink-muted">({formatLinesAndPieces(invoice.itemCount, invoice.totalQtyMilli)})</span>
         </h2>
         {edited && (
           <p className="text-sm text-ink-muted">
             The price was changed on this bill for{" "}
             <span className="num">{editedLines.size}</span> {editedLines.size === 1 ? "line" : "lines"}: Rate is the price
             charged, with the catalog price below it. The receipt shows only the charged rate.
+          </p>
+        )}
+        {fractionLines.size > 0 && (
+          <p className="text-sm text-ink-muted">
+            <span className="num">{fractionLines.size}</span> {fractionLines.size === 1 ? "line" : "lines"} sold by the piece{" "}
+            {fractionLines.size === 1 ? "has" : "have"} a fractional quantity (highlighted). The receipt shows the quantity
+            with no marker.
           </p>
         )}
         <div className={tbl.wrap}>
@@ -178,7 +190,7 @@ function InvoiceView({
             </thead>
             <tbody className={tbl.tbody}>
               {invoice.items.map((it) => (
-                <tr key={it.lineNo} className={tbl.tr}>
+                <tr key={it.lineNo} className={cx(tbl.tr, fractionLines.has(it.lineNo) && "bg-warning-soft")}>
                   <td className="num px-3 py-2.5 text-ink-muted">{it.lineNo}</td>
                   <td className="px-3 py-2.5">
                     <p className="font-bold">{it.name}</p>
@@ -201,7 +213,8 @@ function InvoiceView({
                       </>
                     ) : (
                       <>
-                        {formatQty(it.qtyMilli, false)} <span className="text-xs text-ink-muted">{it.uom}</span>
+                        <span className={cx(fractionLines.has(it.lineNo) && "font-bold")}>{formatQty(it.qtyMilli, false)}</span>{" "}
+                        <span className="text-xs text-ink-muted">{it.uom}</span>
                       </>
                     )}
                   </td>

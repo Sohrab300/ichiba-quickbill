@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   addBlockedReason,
+  canDecrement,
+  canIncrement,
   cartReducer,
   isWeighedRescan,
   chargedPrice,
@@ -66,11 +68,11 @@ describe("cartReducer", () => {
     expect(cart.items[0]).toMatchObject({ unitPrice: 4700, qtyMilli: 2000 });
   });
 
-  it("keeps quantities within 1..9,999, ignores invalid ones and never removes on decrement", () => {
+  it("keeps quantities within 0.001..9,999, ignores invalid ones and never removes on decrement", () => {
     let cart = cartWith(soap);
     cart = cartReducer(cart, { type: "decrement", productId: soap.productId });
     expect(cart.items[0].qtyMilli).toBe(1000);
-    for (const qtyMilli of [0, -1000, 1500, 250, 1e12, Number.NaN, 2.5]) {
+    for (const qtyMilli of [0, -1000, -500, MAX_PIECES_MILLI + 1, 1e12, Number.NaN, 2.5]) {
       expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli })).toBe(cart);
     }
     cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: MAX_PIECES_MILLI });
@@ -149,13 +151,15 @@ describe("sold by weight", () => {
     expect(cart.items[0].qtyMilli).toBe(250);
     const { lines, totals } = previewCart(cart.items);
     expect(lines[0].lineTotal).toBe(1750); // 0.250 kg × ₹70.00
-    expect(totals).toMatchObject({ itemCount: 1, totalQty: 0, subtotal: 1750, grandTotal: 1800 });
+    expect(totals).toMatchObject({ itemCount: 1, totalQtyMilli: 0, subtotal: 1750, grandTotal: 1800 });
     expect(toSaleItems(cart)).toEqual([{ productId: tomato.productId, qty: "0.250" }]);
   });
 
-  it("refuses a decimal qty on a normal item, and weights out of range", () => {
+  it("refuses weights out of range (a normal item may go above 999.999)", () => {
     const cart = cartWith(soap, tomato);
-    expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 500 })).toBe(cart);
+    expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 1_000_000 }).items[0].qtyMilli).toBe(
+      1_000_000
+    );
     expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 0 })).toBe(cart);
     expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: MAX_WEIGHT_MILLI + 1 })).toBe(cart);
     expect(cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: MAX_WEIGHT_MILLI }).items[1].qtyMilli).toBe(
@@ -202,6 +206,9 @@ describe("sold by weight", () => {
       qtyMilli: 3000,
       soldByWeight: true,
     });
+    // ...unless that is over the kg maximum.
+    const many = cartReducer(cartWith(soap), { type: "setQty", productId: soap.productId, qtyMilli: 1_500_000 });
+    expect(cartReducer(many, { type: "add", product: { ...soap, soldByWeight: true } }).items[0].qtyMilli).toBe(1000);
   });
 
   it("counts weighed lines as lines, not pieces; price edit is per kg", () => {
@@ -210,7 +217,7 @@ describe("sold by weight", () => {
     cart = cartReducer(cart, { type: "setPrice", productId: tomato.productId, price: 6000 });
     const { lines, totals } = previewCart(cart.items);
     expect(lines[1]).toMatchObject({ unitPrice: 7000, editedPrice: 6000, lineTotal: 9000 });
-    expect(totals).toMatchObject({ itemCount: 2, totalQty: 2, subtotal: 18000 });
+    expect(totals).toMatchObject({ itemCount: 2, totalQtyMilli: 2000, subtotal: 18000 });
     expect(toSaleItems(cart)).toEqual([
       { productId: soap.productId, qty: "2" },
       { productId: tomato.productId, qty: "1.500", unitPrice: 6000 },
@@ -228,9 +235,67 @@ describe("sold by weight", () => {
   it("refuses a saved cart with a qty its line can't have", () => {
     const cart = cartWith(soap, tomato);
     const bad = (item: Record<string, unknown>) => JSON.stringify({ ...cart, items: [item] });
-    expect(parseStoredCart(bad({ ...cart.items[0], qtyMilli: 1500 }))).toBeNull(); // decimal on a normal item
+    expect(parseStoredCart(bad({ ...cart.items[0], qtyMilli: 0 }))).toBeNull();
+    expect(parseStoredCart(bad({ ...cart.items[0], qtyMilli: MAX_PIECES_MILLI + 1 }))).toBeNull();
     expect(parseStoredCart(bad({ ...cart.items[1], qtyMilli: 0.25 }))).toBeNull(); // a float
     expect(parseStoredCart(bad({ ...cart.items[1], qtyMilli: 1_000_000 }))).toBeNull();
+  });
+});
+
+describe("decimal qty on normal items (REQUIREMENTS.md section 17)", () => {
+  it("0.5 pcs bills half the price; it is not a weighed line", () => {
+    let cart = cartReducer(cartWith(soap), { type: "setQty", productId: soap.productId, qtyMilli: 500 });
+    expect(cart.items[0]).toMatchObject({ qtyMilli: 500, soldByWeight: false });
+    const { lines, totals } = previewCart(cart.items);
+    expect(lines[0].lineTotal).toBe(2250); // 0.5 × ₹45.00
+    expect(totals).toMatchObject({ itemCount: 1, totalQtyMilli: 500, subtotal: 2250 });
+    expect(toSaleItems(cart)).toEqual([{ productId: soap.productId, qty: "0.5" }]);
+    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 2750 });
+    expect(toSaleItems(cart)).toEqual([{ productId: soap.productId, qty: "2.75" }]);
+    for (const qtyMilli of [1, MAX_PIECES_MILLI]) {
+      expect(cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli }).items[0].qtyMilli).toBe(qtyMilli);
+    }
+  });
+
+  it("a re-scan still adds 1 piece (0.5 -> 1.5), never past 9,999", () => {
+    let cart = cartReducer(cartWith(soap), { type: "setQty", productId: soap.productId, qtyMilli: 500 });
+    expect(isWeighedRescan(cart, soap)).toBe(false);
+    cart = cartReducer(cart, { type: "add", product: soap });
+    expect(cart.items[0].qtyMilli).toBe(1500);
+    const nearFull = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: MAX_PIECES_MILLI - 500 });
+    expect(addBlockedReason(nearFull, soap)).toMatch(/cannot go above 9999/);
+    expect(cartReducer(nearFull, { type: "add", product: soap })).toBe(nearFull);
+  });
+
+  it("+/− step 1; a whole qty stops at 1, 0.5 can't go lower, 2.5 -> 1.5 -> 0.5", () => {
+    let cart = cartWith(soap, soap); // 2
+    cart = cartReducer(cart, { type: "decrement", productId: soap.productId });
+    expect(cart.items[0].qtyMilli).toBe(1000);
+    expect(canDecrement(cart.items[0])).toBe(false);
+    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 2500 });
+    cart = cartReducer(cart, { type: "decrement", productId: soap.productId });
+    expect(cart.items[0].qtyMilli).toBe(1500);
+    cart = cartReducer(cart, { type: "decrement", productId: soap.productId });
+    expect(cart.items[0].qtyMilli).toBe(500);
+    expect(canDecrement(cart.items[0])).toBe(false);
+    expect(cartReducer(cart, { type: "decrement", productId: soap.productId })).toBe(cart);
+    cart = cartReducer(cart, { type: "increment", productId: soap.productId });
+    expect(cart.items[0].qtyMilli).toBe(1500);
+    expect(canIncrement({ qtyMilli: MAX_PIECES_MILLI - 999, soldByWeight: false })).toBe(false);
+    expect(canIncrement({ qtyMilli: MAX_PIECES_MILLI - 1000, soldByWeight: false })).toBe(true);
+  });
+
+  it("pieces sum exactly in thousandths, with weighed lines left out", () => {
+    let cart = cartWith(soap, oil, tomato);
+    cart = cartReducer(cart, { type: "setQty", productId: soap.productId, qtyMilli: 100 });
+    cart = cartReducer(cart, { type: "setQty", productId: oil.productId, qtyMilli: 200 });
+    cart = cartReducer(cart, { type: "setQty", productId: tomato.productId, qtyMilli: 333 });
+    expect(previewCart(cart.items).totals.totalQtyMilli).toBe(300); // not 0.30000000000000004
+  });
+
+  it("saves and restores a fractional piece qty", () => {
+    const cart = cartReducer(cartWith(soap), { type: "setQty", productId: soap.productId, qtyMilli: 500 });
+    expect(parseStoredCart(JSON.stringify(cart))).toEqual(cart);
   });
 });
 
@@ -312,7 +377,7 @@ describe("price edit (one bill only)", () => {
     expect(lines[0]).toMatchObject({ unitPrice: 4500, editedPrice: 4000, lineTotal: 12000, taxableValue: 10169, cgst: 915, sgst: 916 });
     expect(lines[1]).toMatchObject({ unitPrice: 4500, lineTotal: 4500 });
     expect(lines[1]).toMatchObject(computeLineGst({ unitPrice: 4500, gstRate: 18, qtyMilli: 1000 }));
-    expect(totals).toMatchObject({ itemCount: 2, totalQty: 4, subtotal: 16500, grandTotal: 16500, roundOff: 0 });
+    expect(totals).toMatchObject({ itemCount: 2, totalQtyMilli: 4000, subtotal: 16500, grandTotal: 16500, roundOff: 0 });
 
     const odd = previewCart(cartReducer(cartWith(soap), setPrice(soap.productId, 4333)).items);
     expect(odd.totals).toMatchObject({ subtotal: 4333, grandTotal: 4300, roundOff: -33 });

@@ -192,6 +192,7 @@ export type Database = {
           created_at: string
           fy: string
           grand_total: number
+          has_fractional_qty: boolean
           has_price_edit: boolean
           id: string
           idempotency_key: string
@@ -221,6 +222,7 @@ export type Database = {
           created_at?: string
           fy: string
           grand_total: number
+          has_fractional_qty?: boolean
           has_price_edit?: boolean
           id?: string
           idempotency_key: string
@@ -250,6 +252,7 @@ export type Database = {
           created_at?: string
           fy?: string
           grand_total?: number
+          has_fractional_qty?: boolean
           has_price_edit?: boolean
           id?: string
           idempotency_key?: string
@@ -524,6 +527,7 @@ export type Database = {
           counter_code: string
           created_at: string
           grand_total: number
+          has_fractional_qty: boolean
           has_price_edit: boolean
           invoice_no: string
           item_count: number

@@ -87,7 +87,7 @@ export function SaleStatusPanel(props: SaleStatusPanelProps) {
           <p className="mt-0.5 font-mono text-xl font-bold break-all tabular-nums lg:text-2xl">{invoice.invoiceNo}</p>
           <p className="text-base">
             <span className="num font-bold">{formatINR(invoice.grandTotal)}</span> · {paymentLabel(invoice.paymentMethod)} ·{" "}
-            <span className="num">{formatLinesAndPieces(invoice.itemCount, invoice.totalQty)}</span>
+            <span className="num">{formatLinesAndPieces(invoice.itemCount, invoice.totalQtyMilli)}</span>
           </p>
         </Alert>
       );

@@ -2,8 +2,8 @@ import "server-only";
 
 // Daily CSV exports (REQUIREMENTS.md section 9), streamed from the server page by page.
 // Admin only. Dates are IST days; amounts are rupees with 2 decimals. The price-edit columns
-// (REQUIREMENTS.md section 16) and then Unit (section 17) are appended at the end so existing
-// spreadsheets keep their columns.
+// (REQUIREMENTS.md section 16), then Unit and Fraction (section 17) are appended at the end so
+// existing spreadsheets keep their columns.
 
 import { connection, type NextRequest } from "next/server";
 import { AuthError, getStaffContext } from "./auth";
@@ -11,7 +11,7 @@ import { createServerClient } from "./supabase/server";
 import type { Database } from "./supabase/database.types";
 import { paymentLabel } from "./constants";
 import { CSV_BOM, csvRow, csvText, paiseToRupees, quoted, type CsvValue } from "./csv";
-import { exportQtyCells } from "./qty";
+import { exportPiecesCell, exportQtyCells } from "./qty";
 import { istDateOf, istDayRange, istTimeOf, parseIstDate, todayIst } from "./ist-date";
 
 export type ExportKind = "summary" | "lines";
@@ -47,7 +47,7 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
     filename,
     header: [
       "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Items", "Pieces",
-      "Taxable Value", "CGST", "SGST", "Round Off", "Total", "Edited (Y/N)",
+      "Taxable Value", "CGST", "SGST", "Round Off", "Total", "Edited (Y/N)", "Fraction (Y/N)",
     ],
     async fetchPage(after) {
       const { data, error } = await createServerClient().rpc("invoice_export_summary", {
@@ -68,13 +68,14 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
       csvText(r.cashier_name),
       paymentLabel(r.payment_method),
       r.item_count,
-      r.total_qty,
+      exportPiecesCell(Number(r.total_qty)),
       paiseToRupees(r.taxable_total),
       paiseToRupees(r.cgst_total),
       paiseToRupees(r.sgst_total),
       paiseToRupees(r.round_off),
       paiseToRupees(r.grand_total),
       r.has_price_edit ? "Y" : "N",
+      r.has_fractional_qty ? "Y" : "N",
     ],
   };
 }

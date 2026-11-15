@@ -2,13 +2,13 @@
  * GST math for the on-screen cart preview (REQUIREMENTS.md section 3).
  *
  * The database is authoritative: create_invoice() (latest version in
- * supabase/migrations/20261115400000_sold_by_weight.sql) computes the real numbers, on the charged
+ * supabase/migrations/20261115500000_decimal_qty_all_products.sql) computes the real numbers, on the charged
  * price, and the printed invoice uses those. This is a line-for-line port so the preview matches;
  * keep the two in sync (scripts/db-tests/check-preview.ts and scripts/test-concurrency.ts check
  * invoices the database created against this function).
  *
  * All amounts are integer paise; quantities are integer thousandths (qtyMilli, 1000 = 1 piece or
- * 1 kg — src/lib/qty.ts). No floats anywhere. Selling prices are GST-inclusive.
+ * 1 kg, any product may be fractional — src/lib/qty.ts). No floats anywhere. Selling prices are GST-inclusive.
  *   line_total = round(unit_price × qty), half up to the paisa  (= (2·price·qtyMilli + 1000) div 2000)
  *   taxable    = line_total × 100 / (100 + rate), rounded half-up to the paisa
  *   gst        = line_total − taxable;  CGST = floor(gst / 2);  SGST = gst − CGST
@@ -36,8 +36,11 @@ export interface GstLineAmounts {
 export interface GstTotals {
   /** Number of lines. */
   itemCount: number;
-  /** Pieces: summed qty of the lines not sold by weight (invoices.total_qty). */
-  totalQty: number;
+  /**
+   * Pieces in thousandths: summed qty of the lines not sold by weight (invoices.total_qty × 1000).
+   * May be fractional (2500 = 2.5 pcs); kept as an integer so the sum is exact.
+   */
+  totalQtyMilli: number;
   subtotal: number;
   taxableTotal: number;
   cgstTotal: number;
@@ -76,13 +79,11 @@ export function lineTotalPaise(unitPrice: number, qtyMilli: number): number {
   return total;
 }
 
-export function computeLineGst({ unitPrice, gstRate, qtyMilli, soldByWeight = false }: GstLineInput): GstLineAmounts {
+/** soldByWeight does not change a line's amounts, only whether its qty counts as pieces. */
+export function computeLineGst({ unitPrice, gstRate, qtyMilli }: GstLineInput): GstLineAmounts {
   assertInt("unitPrice", unitPrice, 0);
   assertInt("gstRate", gstRate, 0);
   assertInt("qtyMilli", qtyMilli, 1);
-  if (!soldByWeight && qtyMilli % 1000 !== 0) {
-    throw new RangeError(`qty must be a whole number for an item not sold by weight (got ${qtyMilli / 1000})`);
-  }
 
   const lineTotal = lineTotalPaise(unitPrice, qtyMilli);
   if (!Number.isSafeInteger(lineTotal * 200)) throw new RangeError("Amount too large");
@@ -107,13 +108,13 @@ export function computeInvoiceTotals<T extends GstLineInput>(
   lines: readonly T[]
 ): { lines: (T & GstLineAmounts)[]; totals: GstTotals } {
   const computed = lines.map((line) => ({ ...line, ...computeLineGst(line) }));
-  let totalQty = 0;
+  let totalQtyMilli = 0;
   let subtotal = 0;
   let taxableTotal = 0;
   let cgstTotal = 0;
   let sgstTotal = 0;
   for (const l of computed) {
-    if (!l.soldByWeight) totalQty += l.qtyMilli / 1000; // whole, checked by computeLineGst
+    if (!l.soldByWeight) totalQtyMilli += l.qtyMilli;
     subtotal += l.lineTotal;
     taxableTotal += l.taxableValue;
     cgstTotal += l.cgst;
@@ -124,7 +125,7 @@ export function computeInvoiceTotals<T extends GstLineInput>(
     lines: computed,
     totals: {
       itemCount: computed.length,
-      totalQty,
+      totalQtyMilli,
       subtotal,
       taxableTotal,
       cgstTotal,

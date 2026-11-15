@@ -469,6 +469,50 @@ receipt shows `0.250 kg`. On a shampoo, typing `.5` is refused. `1.2345` is refu
 
 ---
 
+## Prompt 11 — Decimal quantity for all products (with admin "Fraction" tag)
+
+```text
+Read AGENTS.md and docs/REQUIREMENTS.md section 17 (rewritten: decimals are now allowed on ALL
+products) plus sections 3, 6, 13 and 16. Sold-by-weight from the previous change stays; only the
+"whole numbers for non-weighed items" rule goes away. Find every place that enforces or assumes it
+(DB checks, create_invoice, qty.ts, cart reducer, QtyInput, gst.ts preview, receipts, history,
+exports, tests) before changing anything. Money stays integer paise.
+
+1. Database (NEW migration; never edit applied ones):
+   - invoice_items: replace the "qty whole" check so non-weighed lines allow 0.001–9999.000 with at
+     most 3 decimals (weighed lines keep 0.001–999.999). invoices: total_qty → numeric(12,3) if it is
+     an integer (pieces may now be fractional); add has_fractional_qty boolean not null default false.
+     Existing rows must still pass. No existing invoice row may be rewritten; keep the immutability
+     triggers enabled (fail the migration if any is disabled).
+   - create_invoice: accept up to 3 decimals for every product; set has_fractional_qty when a
+     NON-weighed line has a fractional qty. Same rejection rules otherwise (0, negative, >3 decimals,
+     NaN, strings), all before an invoice number is taken. Idempotency and price edit unchanged.
+   - invoice_json/get_invoice/history/exports: expose has_fractional_qty (admin only, like the
+     price-edit flag) and summary "Fraction (Y/N)".
+2. Shared qty parser/validator: one rule for all items (≤3 decimals), max 999.999 for weighed and
+   9999 for others.
+3. Billing UI: every qty box accepts decimals (inputMode="decimal"). Weighed lines keep their kg
+   behaviour (focus after scan, re-scan doesn't add, "kg" label). Non-weighed lines: show plain whole
+   numbers as today; when fractional show e.g. "0.5 pcs" in the line; re-scan still adds 1; +/− step 1
+   and never go below 1 when starting from a whole number (from 0.5, − is disabled). Summary pieces
+   show up to 3 decimals when fractional.
+4. Admin-only: "Fraction" tag in /invoices and an "Fractional qty only" filter (server-side checks,
+   cashiers never see it); detail page highlights fractional non-weighed lines. Receipts unchanged —
+   no marker.
+5. Tests: update unit and DB tests for decimals on normal items (0.5, 2.75, 0.001, 9999, 1.2345
+   rejected, 10000 rejected), has_fractional_qty set only for non-weighed fractional lines, preview vs
+   DB parity, idempotent retry. Run npm run test:db locally; never write invoices to production.
+
+Lint, typecheck, unit + db tests, build. Give me the migration name and exact commands
+(`npx supabase db push --remote`). Do not commit.
+```
+
+**Check:** as `cl1`, add a shampoo, type `0.5` in qty → line shows `0.5 pcs` and half the price →
+pay. As `admin`, Invoices shows that bill tagged "Fraction"; as `cl1`, no tag. Tomatoes still behave
+as kg (re-scan selects the weight box).
+
+---
+
 ## Tips for running these
 
 - If Claude Code proposes a plan first, read it. If it disagrees with REQUIREMENTS.md, fix the doc

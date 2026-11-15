@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { AlertCircle, Minus, Plus, X } from "lucide-react";
 import { formatINR } from "@/lib/format";
 import { canDecrement, canIncrement, chargedPrice, type CartAction, type CartItem } from "@/lib/cart";
-import { formatQty } from "@/lib/qty";
+import { formatQty, isFractionalPieces } from "@/lib/qty";
 import { Basket } from "@/components/brand/Illustrations";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -168,6 +168,8 @@ export function CartTable({
           const draft = qtyDrafts[item.productId];
           const qtyProblem = draft?.show ? qtyDraftProblem(item, draft) : null;
           const messageId = `qty-msg-${item.productId}`;
+          // Pieces look as before when whole; a fractional qty says "0.5 pcs" (REQUIREMENTS.md 17).
+          const fractional = isFractionalPieces(item);
           return (
             <li
               key={item.productId}
@@ -224,8 +226,15 @@ export function CartTable({
                       /kg
                     </>
                   ) : (
+                    <>
+                    {fractional && (
+                      <>
+                        {" · "}
+                        <span className="num font-semibold text-ink">{formatQty(item.qtyMilli, false)} pcs</span>
+                      </>
+                    )}
                     <span className="lg:hidden">
-                      {" · "}
+                      {fractional ? " × " : " · "}
                       <PriceTrigger
                         item={item}
                         locked={locked}
@@ -236,6 +245,7 @@ export function CartTable({
                       </PriceTrigger>{" "}
                       each
                     </span>
+                    </>
                   )}
                 </p>
               </div>
@@ -276,9 +286,9 @@ export function CartTable({
                   onScan={onScan}
                   messageId={messageId}
                 />
-                {item.soldByWeight && (
-                  <span className="w-5 text-sm font-bold text-ink" aria-hidden>
-                    kg
+                {(item.soldByWeight || fractional) && (
+                  <span className={cx("text-sm font-bold text-ink", item.soldByWeight ? "w-5" : "w-7")} aria-hidden>
+                    {item.soldByWeight ? "kg" : "pcs"}
                   </span>
                 )}
                 <Button

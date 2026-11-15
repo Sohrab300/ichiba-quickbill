@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Price-edit visibility (REQUIREMENTS.md section 16) is decided on the server: cashiers never get
-// the flag, the filter, the count or the catalog prices, whatever the URL says.
+// Audit visibility (price edit, REQUIREMENTS.md section 16; fractional qty, section 17) is decided
+// on the server: cashiers never get the flags, the filters, the count or the catalog prices,
+// whatever the URL says.
 
 vi.mock("server-only", () => ({}));
 
@@ -39,6 +40,7 @@ const row = {
   item_count: 1,
   grand_total: 4000,
   has_price_edit: true,
+  has_fractional_qty: true,
 };
 
 beforeEach(() => {
@@ -48,9 +50,9 @@ beforeEach(() => {
 
 describe("price-edit visibility", () => {
   it("ignores ?edited=1 for cashiers and honours it for admins", () => {
-    expect(resolveInvoiceFilters(cashier, { edited: "1" }, [])).toMatchObject({ showPriceEdits: false, editedOnly: false });
-    expect(resolveInvoiceFilters(admin, { edited: "1" }, [])).toMatchObject({ showPriceEdits: true, editedOnly: true });
-    expect(resolveInvoiceFilters(admin, {}, [])).toMatchObject({ showPriceEdits: true, editedOnly: false });
+    expect(resolveInvoiceFilters(cashier, { edited: "1" }, [])).toMatchObject({ showAudit: false, editedOnly: false });
+    expect(resolveInvoiceFilters(admin, { edited: "1" }, [])).toMatchObject({ showAudit: true, editedOnly: true });
+    expect(resolveInvoiceFilters(admin, {}, [])).toMatchObject({ showAudit: true, editedOnly: false });
   });
 
   it("never selects has_price_edit for cashiers", async () => {
@@ -87,7 +89,8 @@ describe("price-edit visibility", () => {
         id: row.id, invoice_no: row.invoice_no, counter_id: CL1.id, counter_code: "CL1", fy: "26-27", seq_number: 1,
         idempotency_key: "2d6b9a4e-1c1f-4c55-9a52-3f4f8b1d2e10", cashier_user_id: cashier.userId, cashier_name: "CL1",
         payment_method: "cash", item_count: 1, total_qty: 1, subtotal: 4000, taxable_total: 3390, cgst_total: 305,
-        sgst_total: 305, round_off: 0, grand_total: 4000, has_price_edit: true, created_at: row.created_at,
+        sgst_total: 305, round_off: 0, grand_total: 4000, has_price_edit: true, has_fractional_qty: true,
+        created_at: row.created_at,
         store: { legal_name: "S", address: "A", phone: null, gstin: "06ABLFA8216A1ZT", state_code: "06", state_name: "Haryana", footer: null },
         items: [{
           line_no: 1, product_id: "0c8f0e4c-5a7e-4d3e-9f39-7b0b2b6d9a11", item_code: "7021317", name: "Soap", hsn_code: "3401",
@@ -101,9 +104,39 @@ describe("price-edit visibility", () => {
     const forCashier = await getInvoiceForHistory(cashier, row.id);
     expect(forCashier?.audited).toBe(false);
     const json = JSON.stringify(forCashier?.invoice);
-    expect(json).not.toMatch(/catalogPrice|priceEdited|hasPriceEdit|4500/);
+    expect(json).not.toMatch(/catalogPrice|priceEdited|hasPriceEdit|hasFractionalQty|4500/);
 
     const forAdmin = await getInvoiceForHistory(admin, row.id);
-    expect(forAdmin).toMatchObject({ audited: true, invoice: { hasPriceEdit: true, items: [{ catalogPrice: 4500, priceEdited: true }] } });
+    expect(forAdmin).toMatchObject({
+      audited: true,
+      invoice: { hasPriceEdit: true, hasFractionalQty: true, items: [{ catalogPrice: 4500, priceEdited: true }] },
+    });
+  });
+});
+
+describe("fractional-qty visibility", () => {
+  it("ignores ?fraction=1 for cashiers and honours it for admins", () => {
+    expect(resolveInvoiceFilters(cashier, { fraction: "1" }, [])).toMatchObject({ showAudit: false, fractionOnly: false });
+    expect(resolveInvoiceFilters(admin, { fraction: "1" }, [])).toMatchObject({ showAudit: true, fractionOnly: true });
+    expect(resolveInvoiceFilters(admin, {}, [])).toMatchObject({ fractionOnly: false });
+  });
+
+  it("never selects or filters on has_fractional_qty for cashiers", async () => {
+    const q = queryReturning({ data: [{ ...row, has_price_edit: undefined, has_fractional_qty: undefined }], error: null, count: 1 });
+    db.from.mockReturnValue(q.builder);
+    const page = await listInvoices(resolveInvoiceFilters(cashier, { fraction: "1" }, []));
+    expect(q.calls.find(([m]) => m === "select")![1][0]).not.toMatch(/has_fractional_qty/);
+    expect(q.calls.some(([m, args]) => m === "eq" && args[0] === "has_fractional_qty")).toBe(false);
+    expect(page.rows[0]).not.toHaveProperty("hasFractionalQty");
+  });
+
+  it("selects and filters on has_fractional_qty for admins", async () => {
+    const q = queryReturning({ data: [row], error: null, count: 1 });
+    db.from.mockReturnValue(q.builder);
+    const page = await listInvoices(resolveInvoiceFilters(admin, { fraction: "1" }, []));
+    expect(q.calls.find(([m]) => m === "select")![1][0]).toMatch(/has_fractional_qty/);
+    expect(q.calls).toContainEqual(["eq", ["has_fractional_qty", true]]);
+    expect(q.calls.some(([m, args]) => m === "eq" && args[0] === "has_price_edit")).toBe(false);
+    expect(page.rows[0]).toMatchObject({ hasFractionalQty: true });
   });
 });

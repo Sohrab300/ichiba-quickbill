@@ -87,7 +87,7 @@ describe("computeLineGst", () => {
     expect(() => computeLineGst({ unitPrice: 10.5, gstRate: 18, qtyMilli: 1000 })).toThrow(RangeError);
     expect(() => computeLineGst({ unitPrice: 100, gstRate: 18, qtyMilli: 0 })).toThrow(RangeError);
     expect(() => computeLineGst({ unitPrice: -1, gstRate: 18, qtyMilli: 1000 })).toThrow(RangeError);
-    expect(() => computeLineGst({ unitPrice: 100, gstRate: 18, qtyMilli: 1500 })).toThrow(RangeError);
+    expect(() => computeLineGst({ unitPrice: 100, gstRate: 18, qtyMilli: 1.5 })).toThrow(RangeError); // not thousandths
   });
 });
 
@@ -117,7 +117,7 @@ describe("computeInvoiceTotals", () => {
     expect(lines.map((l) => l.taxableValue)).toEqual([20000, 85, 4999, 13]);
     expect(totals).toEqual({
       itemCount: 4,
-      totalQty: 5,
+      totalQtyMilli: 5000,
       subtotal: 28713,
       taxableTotal: 25097,
       cgstTotal: 1807,
@@ -135,7 +135,7 @@ describe("computeInvoiceTotals", () => {
   it("returns zeros for an empty cart", () => {
     expect(computeInvoiceTotals([]).totals).toEqual({
       itemCount: 0,
-      totalQty: 0,
+      totalQtyMilli: 0,
       subtotal: 0,
       taxableTotal: 0,
       cgstTotal: 0,
@@ -232,11 +232,27 @@ describe("sold by weight (qty in thousandths, REQUIREMENTS.md section 17)", () =
       { unitPrice: 7000, gstRate: 0, qtyMilli: 1500, soldByWeight: true }, // 1.5 kg
       { unitPrice: 7000, gstRate: 0, qtyMilli: 3000, soldByWeight: true }, // 3 kg, still not pieces
     ]);
-    expect(totals).toMatchObject({ itemCount: 3, totalQty: 2, subtotal: 9000 + 10500 + 21000 });
+    expect(totals).toMatchObject({ itemCount: 3, totalQtyMilli: 2000, subtotal: 9000 + 10500 + 21000 });
   });
 
-  it("refuses a decimal qty on a line that is not sold by weight", () => {
-    expect(() => computeLineGst({ unitPrice: 100, gstRate: 0, qtyMilli: 250 })).toThrow(RangeError);
-    expect(() => computeLineGst({ unitPrice: 100, gstRate: 0, qtyMilli: 250, soldByWeight: true })).not.toThrow();
+  it("prices a fractional piece exactly like a weight (the flag changes only the piece count)", () => {
+    for (const [price, milli] of [[4500, 500], [101, 1005], [3, 500], [12345, 2750], [999_999_999, 1]] as const) {
+      expect(computeLineGst({ unitPrice: price, gstRate: 18, qtyMilli: milli })).toEqual(
+        computeLineGst({ unitPrice: price, gstRate: 18, qtyMilli: milli, soldByWeight: true })
+      );
+    }
+    expect(computeLineGst({ unitPrice: 4500, gstRate: 18, qtyMilli: 500 })).toEqual({
+      lineTotal: 2250, taxableValue: 1907, cgst: 171, sgst: 172,
+    });
+  });
+
+  it("sums fractional pieces in exact thousandths", () => {
+    const { totals } = computeInvoiceTotals([
+      { unitPrice: 4500, gstRate: 18, qtyMilli: 500 }, // 0.5 pcs
+      { unitPrice: 100, gstRate: 0, qtyMilli: 2750 }, // 2.75 pcs
+      { unitPrice: 7000, gstRate: 0, qtyMilli: 250, soldByWeight: true }, // kg, not pieces
+      { unitPrice: 1, gstRate: 0, qtyMilli: 9_999_000 }, // the maximum
+    ]);
+    expect(totals).toMatchObject({ itemCount: 4, totalQtyMilli: 500 + 2750 + 9_999_000, subtotal: 2250 + 275 + 1750 + 9999 });
   });
 });

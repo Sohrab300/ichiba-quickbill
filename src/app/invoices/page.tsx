@@ -131,13 +131,14 @@ function InvoicesView({
       />
 
       <InvoiceFiltersForm
-        key={`${filters.date}|${filters.counter?.code ?? ""}|${filters.search}|${filters.editedOnly}`}
+        key={`${filters.date}|${filters.counter?.code ?? ""}|${filters.search}|${filters.editedOnly}|${filters.fractionOnly}`}
         date={filters.date}
         counterCode={filters.counter?.code ?? null}
         search={filters.search}
         // Admins only (always false/hidden for cashiers, decided on the server).
-        showEditedFilter={filters.showPriceEdits}
+        showAuditFilters={filters.showAudit}
         editedOnly={filters.editedOnly}
+        fractionOnly={filters.fractionOnly}
         counterCodes={counterCodes}
         locked={filters.locked}
         today={today}
@@ -151,6 +152,17 @@ function InvoicesView({
       <InvoiceTable filters={filters} list={list} />
     </>
   );
+}
+
+/** Admin filters "Edited only" / "Fractional qty only" (both false for cashiers). */
+function auditNarrowed(f: InvoiceFilters): boolean {
+  return f.editedOnly || f.fractionOnly;
+}
+
+/** "with an edited price", "with a fractional qty", or both. */
+function auditFilterText(f: InvoiceFilters): string {
+  const parts = [f.editedOnly && "an edited price", f.fractionOnly && "a fractional qty"].filter(Boolean);
+  return `with ${parts.join(" and ")}`;
 }
 
 function ExportLink({ href, label }: { href: string; label: string }) {
@@ -232,9 +244,9 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
             : filters.locked && !filters.counter
               ? "This login has no counter."
               : filters.search
-                ? `No ${filters.editedOnly ? "edited bill's" : "invoice"} number contains “${filters.search}”${filters.allDates ? " on any date" : " for this day"}.`
-                : filters.editedOnly
-                  ? "No bills with an edited price for this day."
+                ? `No ${auditNarrowed(filters) ? "matching bill's" : "invoice"} number contains “${filters.search}”${filters.allDates ? " on any date" : " for this day"}.`
+                : auditNarrowed(filters)
+                  ? `No bills ${auditFilterText(filters)} for this day.`
                   : "No invoices for this day."}
         </p>
         {list.total === null && (
@@ -282,6 +294,12 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
                       Edited
                     </Badge>
                   )}
+                  {/* hasFractionalQty: likewise admins only. */}
+                  {r.hasFractionalQty && (
+                    <Badge tone="warning" className="ml-2 align-middle font-sans">
+                      Fraction
+                    </Badge>
+                  )}
                 </td>
                 {filters.allDates && (
                   <td className="num px-3 py-3 whitespace-nowrap">{shortDate.format(new Date(r.createdAt))}</td>
@@ -303,7 +321,7 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
             {start}–{end}
           </span>{" "}
           of <span className="num">{total.toLocaleString("en-IN")}</span>
-          {filters.editedOnly && " with an edited price"}
+          {auditNarrowed(filters) && ` ${auditFilterText(filters)}`}
           {filters.search && ` matching “${filters.search}”`}
           {filters.allDates && " (all dates)"}
         </p>

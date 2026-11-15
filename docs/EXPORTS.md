@@ -15,26 +15,30 @@ Without `date`, the export is for today. Without `counter`, it covers all counte
 ## What is in the files
 
 - **Summary:** Invoice No, Date, Time (IST), Counter, Cashier, Payment Method, Items, Pieces,
-  Taxable Value, CGST, SGST, Round Off, Total, Edited (Y/N).
+  Taxable Value, CGST, SGST, Round Off, Total, Edited (Y/N), Fraction (Y/N).
 - **Lines:** Invoice No, Date, Time (IST), Counter, Cashier, Payment Method, Line, Item Code,
   Item Name, HSN, UOM, Qty, Rate, MRP, GST Rate %, Taxable Value, CGST, SGST, Line Total,
   Catalog Price, Charged Price, Edited (Y/N), Unit.
 
 New columns are always added at the end, so existing spreadsheets keep their column positions.
 
-### Quantities (items sold by weight)
+### Quantities (decimals and items sold by weight)
 
-Loose fruit and vegetables are sold by weight (kg with up to 3 decimals); everything else is sold
-in whole pieces.
+Every product may be billed with up to 3 decimals. Loose fruit and vegetables are sold by weight
+(kg, up to 999.999); everything else is sold in pieces (up to 9,999), usually whole but possibly
+fractional (e.g. `0.5`).
 
 - **Lines → Qty** is always a plain number, so Excel can sum or filter it: `0.250` (always
-  3 decimals) for a weighed line, `2` for pieces. **Rate** is the price per kg for a weighed line
+  3 decimals) for a weighed line; `2`, or `0.5` / `2.75` when fractional, for pieces. **Rate** is the price per kg for a weighed line
   and per piece otherwise.
 - **Lines → Unit** says what Qty counts: `kg` for weighed lines, `pcs` for everything else. To get
   the kg sold, sum Qty where Unit is `kg` (e.g. `=SUMIFS(L:L, W:W, "kg")`); for pieces, where Unit
   is `pcs`. Don't sum the whole Qty column — it mixes kg and pieces.
 - **Summary → Items** is the number of lines on the bill. **Pieces** counts only lines sold in
   pieces; weighed lines count as lines, their kg are not added (a produce-only bill shows 0).
+  It may be fractional (`2.5`).
+- **Summary → Fraction (Y/N)**: `Y` when a line sold in pieces (not by weight) has a fractional
+  qty — an admin-only safety net, like Edited. Weighed lines never set it.
 - **Edited (Y/N)** / **Catalog Price** / **Charged Price**: the price was changed on that bill
   (admin-only audit). Rate always equals Charged Price.
 

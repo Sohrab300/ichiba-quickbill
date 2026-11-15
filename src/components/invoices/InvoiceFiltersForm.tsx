@@ -17,9 +17,13 @@ interface InvoiceFiltersFormProps {
   /** Cashier: date and counter are fixed (today, own counter). */
   locked: boolean;
   today: string;
-  /** Admins only: the "Edited only" filter (bills with a per-bill price edit). */
-  showEditedFilter: boolean;
+  /**
+   * Admins only: the "Edited only" (per-bill price edit) and "Fractional qty only" (a line not sold
+   * by weight with a fractional qty) filters. The server ignores both for cashiers.
+   */
+  showAuditFilters: boolean;
   editedOnly: boolean;
+  fractionOnly: boolean;
 }
 
 /**
@@ -33,14 +37,17 @@ export function InvoiceFiltersForm({
   counterCodes,
   locked,
   today,
-  showEditedFilter,
+  showAuditFilters,
   editedOnly,
+  fractionOnly,
 }: InvoiceFiltersFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const submit = () => formRef.current?.requestSubmit();
 
   const fieldClass = fieldClasses({ className: "w-auto" });
   const labelClass = cx("flex flex-col gap-1.5", labelClasses);
+  const checkboxClass =
+    "flex h-11 cursor-pointer items-center gap-2 rounded-control border border-ink bg-surface px-3 text-sm font-bold select-none";
 
   return (
     <form ref={formRef} method="get" action="/invoices" className="flex flex-wrap items-end gap-3">
@@ -75,18 +82,31 @@ export function InvoiceFiltersForm({
           </label>
         </>
       )}
-      {showEditedFilter && (
-        <label className="flex h-11 cursor-pointer items-center gap-2 rounded-control border border-ink bg-surface px-3 text-sm font-bold select-none">
-          <input
-            type="checkbox"
-            name="edited"
-            value="1"
-            defaultChecked={editedOnly}
-            onChange={submit}
-            className="h-5 w-5 accent-brand"
-          />
-          Edited only
-        </label>
+      {showAuditFilters && (
+        <>
+          <label className={checkboxClass}>
+            <input
+              type="checkbox"
+              name="edited"
+              value="1"
+              defaultChecked={editedOnly}
+              onChange={submit}
+              className="h-5 w-5 accent-brand"
+            />
+            Edited only
+          </label>
+          <label className={checkboxClass}>
+            <input
+              type="checkbox"
+              name="fraction"
+              value="1"
+              defaultChecked={fractionOnly}
+              onChange={submit}
+              className="h-5 w-5 accent-brand"
+            />
+            Fractional qty only
+          </label>
+        </>
       )}
 
       <label className={cx(labelClass, "min-w-56 flex-1")}>
@@ -114,7 +134,7 @@ export function InvoiceFiltersForm({
           href={
             locked
               ? "/invoices"
-              : `/invoices?date=${date}${counterCode ? `&counter=${counterCode}` : ""}${editedOnly ? "&edited=1" : ""}`
+              : `/invoices?date=${date}${counterCode ? `&counter=${counterCode}` : ""}${editedOnly ? "&edited=1" : ""}${fractionOnly ? "&fraction=1" : ""}`
           }
           className={buttonClasses({ variant: "ghost", size: "sm", link: true, className: "gap-1" })}
         >

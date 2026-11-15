@@ -47,10 +47,10 @@ interface QtyInputProps {
 }
 
 /**
- * The qty box of a cart line (REQUIREMENTS.md sections 13 and 17).
+ * The qty box of a cart line (REQUIREMENTS.md section 17).
  *
- * - Pieces: whole numbers 1–9,999 (numeric keypad). Sold by weight: kg with up to 3 decimals,
- *   0.001–999.999 (decimal keypad), e.g. ".250".
+ * - Every product takes up to 3 decimals (decimal keypad), e.g. "0.5", ".250", "2.75".
+ *   Pieces: 0.001–9,999. Sold by weight: kg, 0.001–999.999.
  * - Every valid keystroke goes straight into the cart, so the amount, the total and a payment
  *   shortcut pressed right away all use exactly what is in the box.
  * - Invalid text stays in the box with a message, and payment is blocked until it is fixed.
@@ -91,7 +91,7 @@ export function QtyInput({ item, draft, onDraft, locked, dispatch, onDone, onSca
       data-qty-input=""
       value={text}
       type="text"
-      inputMode={item.soldByWeight ? "decimal" : "numeric"}
+      inputMode="decimal"
       autoComplete="off"
       spellCheck={false}
       enterKeyHint="done"
@@ -155,7 +155,8 @@ export function QtyInput({ item, draft, onDraft, locked, dispatch, onDone, onSca
       className={cx(
         fieldBase,
         "num h-11 px-1 text-center text-lg font-bold",
-        item.soldByWeight ? "w-20" : "w-14",
+        // Wide enough for "0.250" / "2.75"; whole pieces keep the narrow box.
+        item.soldByWeight || text.includes(".") ? "w-20" : "w-14",
         showing && "border-danger"
       )}
     />

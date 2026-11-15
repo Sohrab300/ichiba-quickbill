@@ -74,9 +74,13 @@ declare
   v_msg text;
 begin
   perform pg_temp.ok('backfill: every pre-existing line has catalog_price = unit_price and is not edited',
-    (select count(*) = 3 and bool_and(catalog_price = unit_price and not price_edited) from public.invoice_items));
+    (select count(*) = 3 and bool_and(it.catalog_price = it.unit_price and not it.price_edited)
+       from public.invoice_items it join public.invoices i on i.id = it.invoice_id
+      where i.idempotency_key in ('00000000-0000-4000-8000-0000000b0001', '00000000-0000-4000-8000-0000000b0002')));
+  -- (fixtures.sql invoices; fixtures-before-decimal-qty.sql adds later ones, made after this backfill)
   perform pg_temp.ok('backfill: pre-existing invoices have has_price_edit = false',
-    (select count(*) = 2 and not bool_or(has_price_edit) from public.invoices));
+    (select count(*) = 2 and not bool_or(has_price_edit) from public.invoices
+      where idempotency_key in ('00000000-0000-4000-8000-0000000b0001', '00000000-0000-4000-8000-0000000b0002')));
 
   begin
     update public.invoice_items set unit_price = unit_price;
