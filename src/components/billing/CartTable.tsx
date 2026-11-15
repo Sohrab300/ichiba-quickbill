@@ -1,23 +1,84 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import { formatINR } from "@/lib/format";
-import type { CartAction, CartItem } from "@/lib/cart";
+import { chargedPrice, type CartAction, type CartItem } from "@/lib/cart";
 import { MAX_LINE_QTY } from "@/lib/constants";
 import { Basket } from "@/components/brand/Illustrations";
 import { Button } from "@/components/ui/Button";
 import { fieldBase } from "@/components/ui/Field";
 import { cx } from "@/components/ui/cx";
 
+/** A cart line with its preview amount (src/lib/gst.ts, on the charged price). */
+export type CartTableLine = CartItem & { lineTotal: number };
+
 interface CartTableProps {
-  items: CartItem[];
+  items: CartTableLine[];
   /** The most recently scanned line; `seq` changes on every scan so re-scans scroll too. */
   highlight: { productId: string; seq: number } | null;
   locked: boolean;
   dispatch: (action: CartAction) => void;
   /** Called after any button/qty action so focus can go back to the scan box. */
   onDone: () => void;
+  /** Double-click / double-tap on a line's Price: open the price edit beside `anchor`. */
+  onEditPrice: (productId: string, anchor: HTMLElement) => void;
+}
+
+/** Two taps closer than this (ms) count as a double-tap. */
+const DOUBLE_TAP_MS = 400;
+
+/**
+ * A line's price; double-click (mouse) or double-tap (touch) opens the per-bill price edit.
+ * Pressing it never moves focus or selects text, so the scan box keeps the scanner's input.
+ * An edited price is shown in a heavier weight with a dotted underline (cashier hint only).
+ */
+function PriceTrigger({
+  item,
+  locked,
+  onEdit,
+  className,
+  children,
+}: {
+  item: CartItem;
+  locked: boolean;
+  onEdit: (anchor: HTMLElement) => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  const lastTap = useRef(0);
+  const edited = item.editedPrice !== undefined;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      aria-disabled={locked || undefined}
+      aria-label={`Price of ${item.name}: ${formatINR(chargedPrice(item))}. Double-click to change it for this bill.`}
+      title={locked ? undefined : "Double-click to change the price for this bill"}
+      onMouseDown={(e) => e.preventDefault()}
+      onDoubleClick={(e) => {
+        if (!locked) onEdit(e.currentTarget);
+      }}
+      onPointerUp={(e) => {
+        if (e.pointerType === "mouse") return; // mice use dblclick
+        const now = e.timeStamp;
+        if (now - lastTap.current < DOUBLE_TAP_MS) {
+          lastTap.current = 0;
+          if (!locked) onEdit(e.currentTarget);
+        } else {
+          lastTap.current = now;
+        }
+      }}
+      className={cx(
+        "num touch-manipulation rounded-sm select-none",
+        !locked && "cursor-pointer hover:bg-paper-2",
+        edited && "font-extrabold underline decoration-dotted decoration-2 underline-offset-4",
+        className
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 // One DOM per line: a card on phones, a table row (shared column template) from lg up.
@@ -27,7 +88,7 @@ const LG_COLUMNS =
 const ROW_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 [grid-template-areas:'name_remove'_'qty_amount'] " + LG_COLUMNS;
 
-export function CartTable({ items, highlight, locked, dispatch, onDone }: CartTableProps) {
+export function CartTable({ items, highlight, locked, dispatch, onDone, onEditPrice }: CartTableProps) {
   const listRef = useRef<HTMLOListElement>(null);
 
   useEffect(() => {
@@ -101,7 +162,15 @@ export function CartTable({ items, highlight, locked, dispatch, onDone }: CartTa
                   <span className="num">{item.gstRate}%</span>
                   <span className="lg:hidden">
                     {" · "}
-                    <span className="num">{formatINR(item.unitPrice)}</span> each
+                    <PriceTrigger
+                      item={item}
+                      locked={locked}
+                      onEdit={(anchor) => onEditPrice(item.productId, anchor)}
+                      className="-mx-1 px-1 py-0.5 text-ink"
+                    >
+                      {formatINR(chargedPrice(item))}
+                    </PriceTrigger>{" "}
+                    each
                   </span>
                 </p>
               </div>
@@ -109,8 +178,15 @@ export function CartTable({ items, highlight, locked, dispatch, onDone }: CartTa
               <span className="num hidden text-right text-sm text-ink-muted [grid-area:mrp] lg:block">
                 {item.mrp !== null ? formatINR(item.mrp) : "—"}
               </span>
-              <span className="num hidden text-right text-sm font-semibold [grid-area:price] lg:block">
-                {formatINR(item.unitPrice)}
+              <span className="hidden text-right text-sm font-semibold [grid-area:price] lg:block">
+                <PriceTrigger
+                  item={item}
+                  locked={locked}
+                  onEdit={(anchor) => onEditPrice(item.productId, anchor)}
+                  className="-mr-1 px-1 py-1"
+                >
+                  {formatINR(chargedPrice(item))}
+                </PriceTrigger>
               </span>
 
               <div className="flex items-center gap-1 [grid-area:qty] lg:justify-center">
@@ -169,7 +245,7 @@ export function CartTable({ items, highlight, locked, dispatch, onDone }: CartTa
               </div>
 
               <span className="num self-center text-right text-lg font-extrabold text-ink [grid-area:amount]">
-                {formatINR(item.unitPrice * item.qty)}
+                {formatINR(item.lineTotal)}
               </span>
 
               <Button

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:concurrency": "tsx scripts/test-concurrency.ts",
+    "test:db": "bash scripts/test-db-local.sh",
     "db:audit": "npx supabase db query --remote --read-only -o table -f scripts/db-audit.sql",
     "db:explain": "tsx scripts/explain-scan-lookup.ts"
   },

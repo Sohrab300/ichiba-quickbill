@@ -359,6 +359,63 @@ exactly as before.
 
 ---
 
+## Prompt 9 — Change an item's price on one bill
+
+```text
+Read AGENTS.md and docs/REQUIREMENTS.md sections 3, 6, 13 and section 16 (rewritten — follow it
+exactly; an earlier version of this prompt with reasons/dialogs was cancelled, ignore it).
+Add a per-bill price edit. It touches invoice integrity: think it through before coding.
+The product's catalog price in the database must NEVER change because of this.
+
+1. Database (NEW migration; never edit applied ones):
+   - invoice_items: add catalog_price integer not null (backfill existing rows = unit_price) and
+     price_edited boolean not null default false. invoices: add has_price_edit boolean not null
+     default false (backfill false). Keep the immutability triggers working (disable/enable only
+     around the backfill inside this migration).
+   - create_invoice: p_items elements may carry an optional "unit_price" (integer paise). Always
+     read selling_price and mrp from products. If unit_price is present and differs from
+     selling_price: require 0 < unit_price <= mrp, else raise a clear error; set price_edited and
+     the invoice's has_price_edit. Otherwise charge selling_price. The same product sent twice with
+     different prices is an error. GST/round-off math unchanged but on the charged price.
+     Idempotency unchanged: a repeated key returns the original invoice unchanged.
+   - invoice_json / get_invoice return catalog_price and price_edited per line and has_price_edit.
+   - Exports (admin only): line rows get Catalog Price, Charged Price, Edited (Y/N); summary rows
+     get Edited (Y/N). invoice_day_totals gets an edited-bills count.
+2. Server: completeSale's zod schema accepts an optional unitPrice (int paise) per item and passes
+   it through. Counter/cashier still never come from input.
+3. Billing UI (desktop and phone):
+   - Double-click (phone: double-tap) on a cart line's Price opens a SMALL popover anchored right
+     beside that price: one ₹ input (prefilled, selected), live new line amount, Save and
+     "Reset to original price". Enter saves, Esc closes, click outside closes without saving,
+     focus returns to the scan box. Values > MRP or <= 0 show an inline message and can't be saved.
+     No reason field, no full-screen dialog.
+   - The line then shows the charged price (Amount and totals use it via the shared gst.ts preview).
+     A subtle hint for the cashier is fine (e.g. the price in a different weight/underline) but no
+     "edited" badge.
+   - Cart state persists unitPrice with the cart in localStorage. Editing is blocked while a sale is
+     submitting or its status is unknown, like other edits. The double-click must not interfere with
+     the scan box focus or with scanner input.
+4. Receipts: both copies show only the charged rate — no marker of any kind.
+5. Admin-only visibility: in /invoices show an "Edited" tag on bills with has_price_edit and an
+   "Edited only" filter; on the detail page show catalog vs charged price per edited line. Cashiers
+   never see these tags (check on the server side, not just hidden in CSS).
+6. Tests: cart reducer + preview math with edited prices; DB-level checks in the local harness or a
+   script that does NOT write to production: > MRP rejected, 0 rejected, edit + idempotent retry
+   returns the same invoice, GST on edited price matches the preview, products.selling_price
+   unchanged after a sale with an edit.
+
+Lint, typecheck, tests, build. Give me the migration name and exact commands to apply it.
+Do not run anything that writes invoices to production. Do not commit.
+```
+
+**Check:** bill an item, double-click its price, set it lower, Enter → the line and total update →
+pay with Cash → the receipt shows the new rate with no marker. As `admin`, Invoices shows the bill
+tagged "Edited" (and the "Edited only" filter finds it); as `cl1` there's no tag. In Supabase,
+`select selling_price from products where item_code='7021317';` is unchanged. A price above MRP is
+refused.
+
+---
+
 ## Tips for running these
 
 - If Claude Code proposes a plan first, read it. If it disagrees with REQUIREMENTS.md, fix the doc

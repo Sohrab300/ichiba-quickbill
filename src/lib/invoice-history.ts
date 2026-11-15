@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { StaffContext } from "./auth";
 import { createServerClient } from "./supabase/server";
 import { PAYMENT_METHODS, type PaymentMethod } from "./constants";
-import { invoiceJsonSchema, type Invoice } from "./invoice";
+import { invoiceJsonSchema, toPublicInvoice, type AuditedInvoice, type Invoice } from "./invoice";
 import { toInvoiceNoSearchTerm } from "./invoice-search";
 import { istDateOf, istDayRange, parseIstDate, todayIst } from "./ist-date";
 
@@ -28,6 +28,14 @@ export interface InvoiceFilters {
   search: string;
   /** 1-based. */
   page: number;
+  /**
+   * Admins only: price edits are visible (REQUIREMENTS.md section 16) — the "Edited" tag, the
+   * edited-bills count and the "Edited only" filter. Always false for cashiers, so the edit flag
+   * is never even read from the database for them.
+   */
+  showPriceEdits: boolean;
+  /** Admins only: list only bills with an edited price (?edited=1). */
+  editedOnly: boolean;
   /** true for cashiers: date and counter are fixed to today and their own counter. */
   locked: boolean;
   /**
@@ -66,6 +74,8 @@ export function resolveInvoiceFilters(staff: StaffContext, params: RawParams, co
       counter: own ? { id: own.id, code: own.code, isActive: true } : null,
       search,
       page,
+      showPriceEdits: false,
+      editedOnly: false,
       locked: true,
       allDates: false,
     };
@@ -77,17 +87,23 @@ export function resolveInvoiceFilters(staff: StaffContext, params: RawParams, co
     counter: counters.find((c) => c.code === code) ?? null,
     search,
     page,
+    showPriceEdits: true,
+    editedOnly: first(params.edited) === "1",
     locked: false,
     allDates: search !== "",
   };
 }
 
 /** Query string for these filters (page omitted when 1), for links that keep them. */
-export function filtersQuery(f: Pick<InvoiceFilters, "date" | "counter" | "search" | "page" | "locked">, page = f.page): string {
+export function filtersQuery(
+  f: Pick<InvoiceFilters, "date" | "counter" | "search" | "page" | "locked" | "editedOnly">,
+  page = f.page
+): string {
   const q = new URLSearchParams();
   if (!f.locked) {
     q.set("date", f.date);
     if (f.counter) q.set("counter", f.counter.code);
+    if (f.editedOnly) q.set("edited", "1");
   }
   if (f.search) q.set("q", f.search);
   if (page > 1) q.set("page", String(page));
@@ -108,6 +124,8 @@ export interface InvoiceListRow {
   paymentMethod: PaymentMethod;
   itemCount: number;
   grandTotal: number;
+  /** Admins only (undefined for cashiers): the bill has an edited price. */
+  hasPriceEdit?: boolean;
 }
 
 export interface InvoiceListPage {
@@ -125,7 +143,10 @@ const listRow = z.object({
   payment_method: z.enum(PAYMENT_METHODS),
   item_count: z.number().int(),
   grand_total: z.number().int(),
+  has_price_edit: z.boolean().optional(),
 });
+
+const LIST_COLUMNS = "id, invoice_no, created_at, counter_code, cashier_name, payment_method, item_count, grand_total";
 
 /**
  * One page of invoices matching the filters, newest first. A login without a counter that isn't
@@ -137,9 +158,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
 
   let query = createServerClient()
     .from("invoices")
-    .select("id, invoice_no, created_at, counter_code, cashier_name, payment_method, item_count, grand_total", {
-      count: "exact",
-    })
+    .select(f.showPriceEdits ? `${LIST_COLUMNS}, has_price_edit` : LIST_COLUMNS, { count: "exact" })
     .order("created_at", { ascending: false })
     .order("invoice_no", { ascending: false })
     .range(offset, offset + INVOICES_PAGE_SIZE - 1);
@@ -150,6 +169,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
   if (f.counter) query = query.eq("counter_id", f.counter.id);
   // toInvoiceNoSearchTerm() leaves only [A-Z0-9/-], so no LIKE wildcards get through.
   if (f.search) query = query.ilike("invoice_no", `%${f.search}%`);
+  if (f.showPriceEdits && f.editedOnly) query = query.eq("has_price_edit", true);
 
   const { data, error, count } = await query;
   if (error) {
@@ -168,6 +188,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
       paymentMethod: r.payment_method,
       itemCount: r.item_count,
       grandTotal: r.grand_total,
+      ...(f.showPriceEdits ? { hasPriceEdit: r.has_price_edit ?? false } : {}),
     })),
   };
 }
@@ -187,6 +208,8 @@ export interface Totals {
 
 export interface DayTotals extends Totals {
   byPaymentMethod: Record<PaymentMethod, Totals>;
+  /** Bills with an edited price. Admins only: null for cashiers. */
+  editedCount: number | null;
 }
 
 const ZERO: Totals = { invoiceCount: 0, taxableTotal: 0, cgstTotal: 0, sgstTotal: 0, roundOff: 0, grandTotal: 0 };
@@ -194,6 +217,7 @@ const ZERO: Totals = { invoiceCount: 0, taxableTotal: 0, cgstTotal: 0, sgstTotal
 const totalsRow = z.object({
   payment_method: z.enum(PAYMENT_METHODS),
   invoice_count: z.number().int(),
+  edited_count: z.number().int().optional(),
   taxable_total: z.number().int(),
   cgst_total: z.number().int(),
   sgst_total: z.number().int(),
@@ -205,9 +229,11 @@ const totalsRow = z.object({
  * Totals for the whole IST day and counter filter (the invoice-number search does not narrow
  * them), so they match the daily-summary export for the same date and counter.
  */
-export async function getDayTotals(f: Pick<InvoiceFilters, "date" | "counter" | "locked">): Promise<DayTotals> {
+export async function getDayTotals(
+  f: Pick<InvoiceFilters, "date" | "counter" | "locked" | "showPriceEdits">
+): Promise<DayTotals> {
   const byPaymentMethod = { cash: { ...ZERO }, upi: { ...ZERO }, card: { ...ZERO } };
-  const day: DayTotals = { ...ZERO, byPaymentMethod };
+  const day: DayTotals = { ...ZERO, byPaymentMethod, editedCount: f.showPriceEdits ? 0 : null };
   if (f.locked && !f.counter) return day;
 
   const { from, to } = istDayRange(f.date);
@@ -231,6 +257,7 @@ export async function getDayTotals(f: Pick<InvoiceFilters, "date" | "counter" | 
     };
     byPaymentMethod[r.payment_method] = t;
     for (const k of Object.keys(ZERO) as (keyof Totals)[]) day[k] += t[k];
+    if (day.editedCount !== null) day.editedCount += r.edited_count ?? 0;
   }
   return day;
 }
@@ -239,8 +266,12 @@ export async function getDayTotals(f: Pick<InvoiceFilters, "date" | "counter" | 
 // One invoice
 // ---------------------------------------------------------------------------
 
-/** The full invoice (get_invoice RPC), or null if the id does not exist. Throws on database errors. */
-export async function fetchInvoice(invoiceId: string): Promise<Invoice | null> {
+/**
+ * The full invoice (get_invoice RPC) including the price-edit audit fields, or null if the id does
+ * not exist. Throws on database errors. Never hand this to a client component or return it from a
+ * Server Action as is: use toPublicInvoice().
+ */
+export async function fetchInvoice(invoiceId: string): Promise<AuditedInvoice | null> {
   const { data, error } = await createServerClient().rpc("get_invoice", { p_invoice_id: invoiceId });
   if (error) throw new Error(`Could not load the invoice: ${error.message}`);
   if (data === null) return null;
@@ -252,15 +283,20 @@ export async function fetchInvoice(invoiceId: string): Promise<Invoice | null> {
   return invoice.data;
 }
 
+export type HistoryInvoice =
+  | { audited: true; invoice: AuditedInvoice }
+  | { audited: false; invoice: Invoice };
+
 /**
  * The invoice for the history detail page, or null when it does not exist or this login may not
  * see it (admins: any; cashiers: their own counter, today — the same scope as the list).
+ * Admins get the price-edit audit fields; for cashiers they are removed here, on the server.
  */
-export async function getInvoiceForHistory(staff: StaffContext, invoiceId: string): Promise<Invoice | null> {
+export async function getInvoiceForHistory(staff: StaffContext, invoiceId: string): Promise<HistoryInvoice | null> {
   if (!z.uuid().safeParse(invoiceId).success) return null;
   const invoice = await fetchInvoice(invoiceId);
   if (!invoice) return null;
-  if (staff.role === "admin") return invoice;
+  if (staff.role === "admin") return { audited: true, invoice };
   const own = staff.counter !== null && invoice.counterId === staff.counter.id;
-  return own && istDateOf(invoice.createdAt) === todayIst() ? invoice : null;
+  return own && istDateOf(invoice.createdAt) === todayIst() ? { audited: false, invoice: toPublicInvoice(invoice) } : null;
 }

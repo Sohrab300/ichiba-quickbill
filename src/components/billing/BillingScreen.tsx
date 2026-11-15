@@ -4,8 +4,7 @@ import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRe
 import { History, Loader2, Trash2 } from "lucide-react";
 import { lookupProduct } from "@/lib/actions";
 import { completeSale, getInvoiceForReprint, type CompleteSaleResult } from "@/lib/invoice-actions";
-import { addBlockedReason, cartReducer, newIdempotencyKey, saveCart, toSaleItems, type CartProduct } from "@/lib/cart";
-import { computeInvoiceTotals } from "@/lib/gst";
+import { addBlockedReason, cartReducer, chargedPrice, newIdempotencyKey, previewCart, saveCart, toSaleItems, type CartProduct } from "@/lib/cart";
 import { formatINR } from "@/lib/format";
 import { playScanErrorTone, playScanSuccessBeep } from "@/lib/audio";
 import { isBrowserOffline, reportRequestFailed, reportRequestSucceeded } from "@/lib/connectivity";
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { useCart } from "./useCart";
 import { ScanBar, type ScanStatus } from "./ScanBar";
 import { CartTable } from "./CartTable";
+import { PriceEditPopover } from "./PriceEditPopover";
 import { CheckoutPanel } from "./CheckoutPanel";
 import { MobilePayment, PaymentButtons, PAYMENT_OPTIONS } from "./PaymentButtons";
 import { SaleStatusPanel, type SaleStatus } from "./SaleStatusPanel";
@@ -90,7 +90,9 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
   const canBill = counterCode !== null;
   const offline = useConnectivity() === "offline";
   const { cart, dispatch, cartRef, hydrated } = useCart(userId);
-  const totals = useMemo(() => computeInvoiceTotals(cart.items).totals, [cart.items]);
+  // Amounts and totals on the charged (possibly edited) prices, same math as create_invoice().
+  const preview = useMemo(() => previewCart(cart.items), [cart.items]);
+  const totals = preview.totals;
 
   // Checkout
   const [submitting, setSubmitting] = useState<{ paymentMethod: PaymentMethod; recheck: boolean } | null>(null);
@@ -119,8 +121,20 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
   const [newProductCode, setNewProductCode] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"clear" | "discard" | null>(null);
   const [previousOpen, setPreviousOpen] = useState(false);
+  /** The per-bill price edit popover: which line, anchored beside which Price element. */
+  const [priceEdit, setPriceEdit] = useState<{ productId: string; anchor: HTMLElement } | null>(null);
 
-  const overlayOpen = cameraOpen || linkCode !== null || newProductCode !== null || confirm !== null || previousOpen;
+  // Like every other cart edit, a price edit is impossible while a sale is being saved or its
+  // outcome is unknown; the popover closes if that happens, or if its line goes away.
+  const cartLocked = submitting !== null || cart.pendingSale;
+  const priceEditItem =
+    priceEdit && !cartLocked && priceEdit.anchor.isConnected
+      ? cart.items.find((i) => i.productId === priceEdit.productId)
+      : undefined;
+  if (priceEdit && !priceEditItem) setPriceEdit(null);
+
+  const overlayOpen =
+    cameraOpen || linkCode !== null || newProductCode !== null || confirm !== null || previousOpen || priceEditItem !== undefined;
   const overlayOpenRef = useRef(overlayOpen);
   useLayoutEffect(() => {
     overlayOpenRef.current = overlayOpen;
@@ -186,12 +200,15 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
       rejectScan(blocked);
       return;
     }
+    const line = cartRef.current.items.find((i) => i.productId === item.productId);
+    // An edited line keeps its price on a re-scan; say the price it is actually charged at.
+    const price = line?.editedPrice !== undefined && line.editedPrice !== item.unitPrice ? chargedPrice(line) : item.unitPrice;
     dispatch({ type: "add", product: item });
     feedback("success");
     setHighlight({ productId: item.productId, seq: seqRef.current });
     // The Completed panel stays until the next item is scanned.
     setCompleted(null);
-    setScanStatus({ tone: "success", text: `${verb}: ${product.name} · ${formatINR(product.sellingPrice)}` });
+    setScanStatus({ tone: "success", text: `${verb}: ${product.name} · ${formatINR(price)}` });
   };
 
   const notFound = (code: string) => {
@@ -357,7 +374,7 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           ? { kind: "completed", invoice: completed }
           : { kind: "idle" };
 
-  const locked = submitting !== null || cart.pendingSale;
+  const locked = cartLocked;
   const payDisabled = !hydrated || !canBill || cart.items.length === 0 || locked || offline;
   const lockedReason = !hydrated
     ? "Loading…"
@@ -427,7 +444,17 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
 
         <div className="flex flex-1 flex-col bg-paper lg:min-h-0 lg:bg-surface">
           {hydrated ? (
-            <CartTable items={cart.items} highlight={highlight} locked={locked} dispatch={dispatch} onDone={focusScan} />
+            <CartTable
+              items={preview.lines}
+              highlight={highlight}
+              locked={locked}
+              dispatch={dispatch}
+              onDone={focusScan}
+              onEditPrice={(productId, anchor) => {
+                if (submittingRef.current || cartRef.current.pendingSale) return;
+                setPriceEdit({ productId, anchor });
+              }}
+            />
           ) : (
             <div className="flex flex-1 items-center justify-center py-16" role="status">
               <Loader2 className="h-8 w-8 animate-spin text-brand" aria-hidden />
@@ -524,6 +551,23 @@ export default function BillingScreen({ userId, isAdmin, counterCode, counterKin
           />
         }
       />
+
+      {priceEditItem && priceEdit && (
+        <PriceEditPopover
+          key={priceEditItem.productId}
+          item={priceEditItem}
+          anchor={priceEdit.anchor}
+          onSave={(price) => {
+            dispatch({ type: "setPrice", productId: priceEditItem.productId, price });
+            setPriceEdit(null);
+          }}
+          onClose={() => setPriceEdit(null)}
+          onScan={(code) => {
+            setPriceEdit(null);
+            enqueueScan(code);
+          }}
+        />
+      )}
 
       {previousOpen && (
         <PreviousInvoiceDialog

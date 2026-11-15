@@ -8,7 +8,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { AuthError, getStaffContext } from "./auth";
 import { createServerClient } from "./supabase/server";
 import { MAX_INVOICE_LINES, MAX_LINE_QTY, PAYMENT_METHODS } from "./constants";
-import { invoiceJsonSchema, type Invoice } from "./invoice";
+import { invoiceJsonSchema, toPublicInvoice, type Invoice } from "./invoice";
 import type { ActionResult } from "./actions";
 import { startOfTodayIst, toInvoiceNoSearchTerm } from "./invoice-search";
 import { fetchInvoice } from "./invoice-history";
@@ -34,12 +34,21 @@ const completeSaleSchema = z.object({
           .int("Quantity must be a whole number")
           .min(1, "Quantity must be at least 1")
           .max(MAX_LINE_QTY, `Quantity cannot exceed ${MAX_LINE_QTY}`),
+        // A per-bill price edit (REQUIREMENTS.md section 16), GST-inclusive paise. Only a request:
+        // create_invoice() reads the catalog price and MRP itself and refuses anything outside
+        // 0 < price <= MRP.
+        unitPrice: z
+          .number()
+          .int("A changed price must be a whole number of paise")
+          .min(1, "A changed price must be more than ₹0")
+          .max(2_147_483_647, "A changed price is too large")
+          .optional(),
       })
     )
     .min(1, "The cart is empty")
     .max(MAX_INVOICE_LINES, `Too many lines on one bill (max ${MAX_INVOICE_LINES})`),
   paymentMethod: z.enum(PAYMENT_METHODS, { error: "Choose Cash, UPI or Card" }),
-  // Any other field (a counter id, prices, totals…) is stripped and ignored.
+  // Any other field (a counter id, catalog prices, totals…) is stripped and ignored.
 });
 
 export type CompleteSaleInput = z.input<typeof completeSaleSchema>;
@@ -100,8 +109,10 @@ function createInvoiceError(error: PostgrestError, context: Record<string, unkno
 /**
  * Completes a sale: creates the invoice in Supabase and returns it.
  *
- * The counter and cashier come only from the signed-in staff profile. Prices, names, GST and
- * totals come only from the database. Re-sending the same idempotencyKey returns the invoice
+ * The counter and cashier come only from the signed-in staff profile. Names, catalog prices, MRP,
+ * GST and totals come only from the database; an item's unitPrice is only a request to charge a
+ * different price on this bill, which the database accepts within 0 < price <= MRP. The returned
+ * invoice carries the charged prices only (no edit audit fields). Re-sending the same idempotencyKey returns the invoice
  * created by the first request (no second invoice, no new number), so the browser can retry
  * safely after an ambiguous failure.
  */
@@ -133,7 +144,11 @@ export async function completeSale(input: CompleteSaleInput): Promise<CompleteSa
         p_idempotency_key: idempotencyKey,
         p_counter_id: staff.counter.id,
         p_cashier_user_id: staff.userId,
-        p_items: items.map((i) => ({ product_id: i.productId, qty: i.qty })),
+        p_items: items.map((i) =>
+          i.unitPrice === undefined
+            ? { product_id: i.productId, qty: i.qty }
+            : { product_id: i.productId, qty: i.qty, unit_price: i.unitPrice }
+        ),
         p_payment_method: paymentMethod,
       })
       .abortSignal(AbortSignal.timeout(RPC_TIMEOUT_MS));
@@ -154,11 +169,12 @@ export async function completeSale(input: CompleteSaleInput): Promise<CompleteSa
     console.error("create_invoice returned a different sale", context, invoice.data.id);
     return fail("The database returned a different sale. Ask an admin.", 500);
   }
-  return { success: true, data: invoice.data, statusCode: 201 };
+  return { success: true, data: toPublicInvoice(invoice.data), statusCode: 201 };
 }
 
 /**
- * Re-fetches an issued invoice from Supabase for reprint. Never creates anything.
+ * Re-fetches an issued invoice from Supabase for reprint, without its price-edit audit fields
+ * (the receipt shows only the charged rate). Never creates anything.
  * Admins can reprint any invoice; other staff only invoices of their own counter. An invoice the
  * caller may not see is reported as not found.
  */
@@ -180,7 +196,7 @@ export async function getInvoiceForReprint(invoiceId: string): Promise<ActionRes
     const allowed = staff.role === "admin" || (staff.counter !== null && invoice.counterId === staff.counter.id);
     if (!allowed) return fail("Invoice not found", 404);
 
-    return { success: true, data: invoice, statusCode: 200 };
+    return { success: true, data: toPublicInvoice(invoice), statusCode: 200 };
   } catch (err: unknown) {
     return fromException(err, "Could not load the invoice.");
   }

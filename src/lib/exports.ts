@@ -1,7 +1,8 @@
 import "server-only";
 
 // Daily CSV exports (REQUIREMENTS.md section 9), streamed from the server page by page.
-// Admin only. Dates are IST days; amounts are rupees with 2 decimals.
+// Admin only. Dates are IST days; amounts are rupees with 2 decimals. The price-edit columns
+// (REQUIREMENTS.md section 16) are appended at the end so existing spreadsheets keep their columns.
 
 import { connection, type NextRequest } from "next/server";
 import { AuthError, getStaffContext } from "./auth";
@@ -44,7 +45,7 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
     filename,
     header: [
       "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Items", "Qty",
-      "Taxable Value", "CGST", "SGST", "Round Off", "Total",
+      "Taxable Value", "CGST", "SGST", "Round Off", "Total", "Edited (Y/N)",
     ],
     async fetchPage(after) {
       const { data, error } = await createServerClient().rpc("invoice_export_summary", {
@@ -71,6 +72,7 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
       paiseToRupees(r.sgst_total),
       paiseToRupees(r.round_off),
       paiseToRupees(r.grand_total),
+      r.has_price_edit ? "Y" : "N",
     ],
   };
 }
@@ -81,7 +83,7 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
     header: [
       "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Line", "Item Code",
       "Item Name", "HSN", "UOM", "Qty", "Rate", "MRP", "GST Rate %", "Taxable Value", "CGST", "SGST",
-      "Line Total",
+      "Line Total", "Catalog Price", "Charged Price", "Edited (Y/N)",
     ],
     async fetchPage(after) {
       const { data, error } = await createServerClient().rpc("invoice_export_lines", {
@@ -116,6 +118,9 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
       paiseToRupees(r.cgst),
       paiseToRupees(r.sgst),
       paiseToRupees(r.line_total),
+      paiseToRupees(r.catalog_price),
+      paiseToRupees(r.unit_price),
+      r.price_edited ? "Y" : "N",
     ],
   };
 }

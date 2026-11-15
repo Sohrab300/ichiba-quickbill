@@ -255,3 +255,26 @@ into a menu.
 - Status colours stay distinguishable from brand red: success = deep green, warning = amber/mustard,
   error = red with an icon and wording (never colour alone).
 - Printed receipts stay plain black on white (thermal printers) — the theme is screen-only.
+
+## 16. Changing an item's price on one bill (price edit)
+
+- Any signed-in biller (counters CL1–3, mobile MOB, admin with a counter) can change the selling
+  price of a cart line **for the current bill only**. **The product's price in the database
+  (catalog) never changes.**
+- How: **double-click** (double-tap on phones) the line's **Price** → a small popover opens right
+  beside that price with one input for the new rate (₹, incl. GST), plus Save and Reset to original
+  price. Enter saves, Esc closes, focus returns to the scan box. No dialog, no reason field.
+- The new price applies to the whole line (all qty), one price per product per bill. Removing the
+  line or Reset clears it.
+- Rules, enforced in the database (`create_invoice`), not only in the browser: new price must be
+  **> ₹0 and ≤ MRP** (selling above MRP isn't allowed). **[DEFAULT]** no maximum discount.
+  **[DEFAULT]** A product without an MRP can only be made cheaper (cap = its catalog price).
+- GST is computed on the charged (edited) price, inclusive, exactly as section 3.
+- Recording: each invoice line stores `catalog_price` (price at sale time) and `unit_price`
+  (charged), plus `price_edited`; the invoice stores `has_price_edit`.
+- Visibility: an **"Edited" tag is shown only to admins** — in the invoices list (plus an
+  "Edited only" filter), on the invoice detail (catalog vs charged per line) and in the admin-only
+  exports. Cashiers don't see the tag in history. **Receipts (both copies) show only the charged
+  rate, with no edit marker.**
+- Section 6's rule "never trust browser prices" becomes: the server always reads the catalog price
+  itself; a browser-sent price is accepted **only** as an explicit price edit within the rules above.

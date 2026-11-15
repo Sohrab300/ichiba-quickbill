@@ -82,6 +82,7 @@ npm run db:audit                                # read-only check; no rows = pas
 | `20261114230000_invoices` | `invoices`, `invoice_items`, `invoice_sequences`, `create_invoice()`, `get_invoice()`. |
 | `20261115100000_invoice_history` | Day totals and CSV export functions, counter prefix guard. |
 | `20261115200000_harden_privileges` | Revokes leftover API-role privileges, stops default grants to `anon`/`authenticated`, and asserts the security rules (fails if any are broken). |
+| `20261115300000_price_edit` | Per-bill price edit: `invoice_items.catalog_price` / `price_edited`, `invoices.has_price_edit`; `create_invoice()` accepts an optional `unit_price` (0 < price ≤ MRP); edit columns in exports and day totals. |
 
 After a schema change, regenerate the types:
 `npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts`.
@@ -160,6 +161,7 @@ Install the app:
 | `npm run db:explain` | Read-only: EXPLAIN of the scan lookup (must use indexes), name search, and round-trip timing. Add `-- --local` for a local stack. |
 | `npm run import:products` | Product import (see above). |
 | `npm run staff:create` | Create a staff login (see above). |
+| `npm run test:db` | Database tests (price edit: limits, idempotency, GST on the edited price, catalog untouched, backfill) on a **throwaway local Postgres** it creates and deletes (Postgres.app or Homebrew `postgresql@15+`; no Docker, never remote). |
 | `npm run test:concurrency` | Parallel sales on CL1–CL3 + same-key retries. **Creates real, undeletable invoices: never run it on the live project** — use `npx supabase start` or a Supabase branch. |
 
 ## Project layout

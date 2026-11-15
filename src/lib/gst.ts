@@ -1,9 +1,9 @@
 /**
  * GST math for the on-screen cart preview (REQUIREMENTS.md section 3).
  *
- * The database is authoritative: create_invoice() in
- * supabase/migrations/20261114230000_invoices.sql computes the real numbers and the printed
- * invoice uses those. This is a line-for-line port so the preview matches; keep the two in sync
+ * The database is authoritative: create_invoice() (latest version in
+ * supabase/migrations/20261115300000_price_edit.sql) computes the real numbers, on the charged
+ * price, and the printed invoice uses those. This is a line-for-line port so the preview matches; keep the two in sync
  * (scripts/test-concurrency.ts checks every invoice it creates against this function).
  *
  * All amounts are integer paise. Selling prices are GST-inclusive.

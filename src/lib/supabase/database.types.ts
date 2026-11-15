@@ -74,6 +74,7 @@ export type Database = {
       }
       invoice_items: {
         Row: {
+          catalog_price: number
           cgst: number
           gst_rate: number
           hsn_code: string | null
@@ -84,6 +85,7 @@ export type Database = {
           line_total: number
           mrp: number | null
           name: string
+          price_edited: boolean
           product_id: string
           qty: number
           sgst: number
@@ -92,6 +94,7 @@ export type Database = {
           uom: string
         }
         Insert: {
+          catalog_price: number
           cgst: number
           gst_rate: number
           hsn_code?: string | null
@@ -102,6 +105,7 @@ export type Database = {
           line_total: number
           mrp?: number | null
           name: string
+          price_edited?: boolean
           product_id: string
           qty: number
           sgst: number
@@ -110,6 +114,7 @@ export type Database = {
           uom: string
         }
         Update: {
+          catalog_price?: number
           cgst?: number
           gst_rate?: number
           hsn_code?: string | null
@@ -120,6 +125,7 @@ export type Database = {
           line_total?: number
           mrp?: number | null
           name?: string
+          price_edited?: boolean
           product_id?: string
           qty?: number
           sgst?: number
@@ -183,6 +189,7 @@ export type Database = {
           created_at: string
           fy: string
           grand_total: number
+          has_price_edit: boolean
           id: string
           idempotency_key: string
           invoice_footer: string | null
@@ -211,6 +218,7 @@ export type Database = {
           created_at?: string
           fy: string
           grand_total: number
+          has_price_edit?: boolean
           id?: string
           idempotency_key: string
           invoice_footer?: string | null
@@ -239,6 +247,7 @@ export type Database = {
           created_at?: string
           fy?: string
           grand_total?: number
+          has_price_edit?: boolean
           id?: string
           idempotency_key?: string
           invoice_footer?: string | null
@@ -451,6 +460,7 @@ export type Database = {
         Args: { p_counter_id?: string; p_from: string; p_to: string }
         Returns: {
           cgst_total: number
+          edited_count: number
           grand_total: number
           invoice_count: number
           payment_method: string
@@ -471,18 +481,20 @@ export type Database = {
         }
         Returns: {
           cashier_name: string
+          catalog_price: number
           cgst: number
           counter_code: string
           created_at: string
           gst_rate: number
-          hsn_code: string | null
+          hsn_code: string
           invoice_no: string
           item_code: string
           line_no: number
           line_total: number
-          mrp: number | null
+          mrp: number
           name: string
           payment_method: string
+          price_edited: boolean
           qty: number
           sgst: number
           taxable_value: number
@@ -505,6 +517,7 @@ export type Database = {
           counter_code: string
           created_at: string
           grand_total: number
+          has_price_edit: boolean
           invoice_no: string
           item_count: number
           payment_method: string

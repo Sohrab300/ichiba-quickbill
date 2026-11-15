@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Download, FileText } from "lucide-react";
 import PageLoading from "@/components/PageLoading";
 import { InvoiceFiltersForm } from "@/components/invoices/InvoiceFiltersForm";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import { buttonClasses } from "@/components/ui/Button";
 import { cardClasses } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -130,10 +131,13 @@ function InvoicesView({
       />
 
       <InvoiceFiltersForm
-        key={`${filters.date}|${filters.counter?.code ?? ""}|${filters.search}`}
+        key={`${filters.date}|${filters.counter?.code ?? ""}|${filters.search}|${filters.editedOnly}`}
         date={filters.date}
         counterCode={filters.counter?.code ?? null}
         search={filters.search}
+        // Admins only (always false/hidden for cashiers, decided on the server).
+        showEditedFilter={filters.showPriceEdits}
+        editedOnly={filters.editedOnly}
         counterCodes={counterCodes}
         locked={filters.locked}
         today={today}
@@ -164,7 +168,12 @@ function ExportLink({ href, label }: { href: string; label: string }) {
 
 function DayTotalsPanel({ totals, caption }: { totals: DayTotals; caption: React.ReactNode }) {
   const tiles = [
-    { label: "Invoices", value: totals.invoiceCount.toLocaleString("en-IN") },
+    {
+      label: "Invoices",
+      value: totals.invoiceCount.toLocaleString("en-IN"),
+      // Admins only: getDayTotals() leaves editedCount null for cashiers.
+      note: totals.editedCount !== null ? `${totals.editedCount.toLocaleString("en-IN")} with edited price` : null,
+    },
     { label: "Taxable value", value: formatINR(totals.taxableTotal) },
     { label: "CGST", value: formatINR(totals.cgstTotal) },
     { label: "SGST", value: formatINR(totals.sgstTotal) },
@@ -178,6 +187,7 @@ function DayTotalsPanel({ totals, caption }: { totals: DayTotals; caption: React
           <div key={t.label} className={cardClasses({ raised: false, className: "p-3" })}>
             <p className="text-xs font-bold tracking-wide text-ink-muted uppercase">{t.label}</p>
             <p className="num mt-1 text-lg font-bold">{t.value}</p>
+            {"note" in t && t.note && <p className="num text-xs text-ink-muted">{t.note}</p>}
           </div>
         ))}
         <div className="col-span-2 rounded-card border-strong border-ink bg-brand p-3 text-paper shadow-hard md:col-span-1">
@@ -222,8 +232,10 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
             : filters.locked && !filters.counter
               ? "This login has no counter."
               : filters.search
-                ? `No invoice number contains “${filters.search}”${filters.allDates ? " on any date" : " for this day"}.`
-                : "No invoices for this day."}
+                ? `No ${filters.editedOnly ? "edited bill's" : "invoice"} number contains “${filters.search}”${filters.allDates ? " on any date" : " for this day"}.`
+                : filters.editedOnly
+                  ? "No bills with an edited price for this day."
+                  : "No invoices for this day."}
         </p>
         {list.total === null && (
           <Link href={`/invoices${filtersQuery(filters, 1)}`} className="mt-3 inline-block font-bold text-brand underline underline-offset-2 hover:text-brand-hover">
@@ -264,6 +276,12 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
                   <Link href={`/invoices/${r.id}${detailQuery}`} className="after:absolute after:inset-0 hover:underline">
                     {r.invoiceNo}
                   </Link>
+                  {/* hasPriceEdit is only loaded for admins (invoice-history.ts). */}
+                  {r.hasPriceEdit && (
+                    <Badge tone="warning" className="ml-2 align-middle font-sans">
+                      Edited
+                    </Badge>
+                  )}
                 </td>
                 {filters.allDates && (
                   <td className="num px-3 py-3 whitespace-nowrap">{shortDate.format(new Date(r.createdAt))}</td>
@@ -285,6 +303,7 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
             {start}–{end}
           </span>{" "}
           of <span className="num">{total.toLocaleString("en-IN")}</span>
+          {filters.editedOnly && " with an edited price"}
           {filters.search && ` matching “${filters.search}”`}
           {filters.allDates && " (all dates)"}
         </p>

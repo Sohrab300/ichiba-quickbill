@@ -17,13 +17,25 @@ interface InvoiceFiltersFormProps {
   /** Cashier: date and counter are fixed (today, own counter). */
   locked: boolean;
   today: string;
+  /** Admins only: the "Edited only" filter (bills with a per-bill price edit). */
+  showEditedFilter: boolean;
+  editedOnly: boolean;
 }
 
 /**
  * The /invoices filters as a plain GET form, so the URL is the state (shareable, back button
  * works) and the list is rendered on the server. Date and counter apply as soon as they change.
  */
-export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, locked, today }: InvoiceFiltersFormProps) {
+export function InvoiceFiltersForm({
+  date,
+  counterCode,
+  search,
+  counterCodes,
+  locked,
+  today,
+  showEditedFilter,
+  editedOnly,
+}: InvoiceFiltersFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const submit = () => formRef.current?.requestSubmit();
 
@@ -63,6 +75,19 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
           </label>
         </>
       )}
+      {showEditedFilter && (
+        <label className="flex h-11 cursor-pointer items-center gap-2 rounded-control border border-ink bg-surface px-3 text-sm font-bold select-none">
+          <input
+            type="checkbox"
+            name="edited"
+            value="1"
+            defaultChecked={editedOnly}
+            onChange={submit}
+            className="h-5 w-5 accent-brand"
+          />
+          Edited only
+        </label>
+      )}
 
       <label className={cx(labelClass, "min-w-56 flex-1")}>
         Invoice number
@@ -86,7 +111,11 @@ export function InvoiceFiltersForm({ date, counterCode, search, counterCodes, lo
       </Button>
       {search && (
         <Link
-          href={locked ? "/invoices" : `/invoices?date=${date}${counterCode ? `&counter=${counterCode}` : ""}`}
+          href={
+            locked
+              ? "/invoices"
+              : `/invoices?date=${date}${counterCode ? `&counter=${counterCode}` : ""}${editedOnly ? "&edited=1" : ""}`
+          }
           className={buttonClasses({ variant: "ghost", size: "sm", link: true, className: "gap-1" })}
         >
           <X className="h-4 w-4" aria-hidden />
