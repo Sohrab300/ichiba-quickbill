@@ -39,6 +39,13 @@ export type Database = {
   }
   public: {
     Tables: {
+      invoice_voids: {
+        Row: { invoice_id: string; voided_at: string; voided_by: string; reason: string }
+        Insert: { invoice_id: string; voided_at?: string; voided_by: string; reason: string }
+        Update: { reason?: string }
+        Relationships: [{ foreignKeyName: "invoice_voids_invoice_id_fkey"; columns: ["invoice_id"]; isOneToOne: true; referencedRelation: "invoices"; referencedColumns: ["id"] }]
+      }
+
       counters: {
         Row: {
           code: string
@@ -436,6 +443,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      void_invoice: {
+        Args: { p_invoice_id: string; p_admin_user_id: string; p_reason: string }
+        Returns: undefined
+      }
+
       create_invoice: {
         Args: {
           p_cashier_user_id: string

@@ -172,6 +172,7 @@ function DayTotalsPanel({ totals, caption }: { totals: DayTotals; caption: React
 
   return (
     <section aria-label="Day totals" className="space-y-3">
+      <p className="text-sm text-ink-muted">Voided invoices are excluded from totals and CSV exports.</p>
       {caption && <p className="text-sm font-semibold text-ink-muted">{caption}</p>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {tiles.map((t) => (
@@ -264,6 +265,7 @@ function InvoiceTable({ filters, list }: { filters: InvoiceFilters; list: Invoic
                   <Link href={`/invoices/${r.id}${detailQuery}`} className="after:absolute after:inset-0 hover:underline">
                     {r.invoiceNo}
                   </Link>
+                  {r.voided && <span className="ml-2 text-xs font-bold text-danger">VOID</span>}
                 </td>
                 {filters.allDates && (
                   <td className="num px-3 py-3 whitespace-nowrap">{shortDate.format(new Date(r.createdAt))}</td>

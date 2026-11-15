@@ -108,6 +108,7 @@ export interface InvoiceListRow {
   paymentMethod: PaymentMethod;
   itemCount: number;
   grandTotal: number;
+  voided: boolean;
 }
 
 export interface InvoiceListPage {
@@ -125,6 +126,7 @@ const listRow = z.object({
   payment_method: z.enum(PAYMENT_METHODS),
   item_count: z.number().int(),
   grand_total: z.number().int(),
+  invoice_voids: z.object({ reason: z.string() }).nullable(),
 });
 
 /**
@@ -137,7 +139,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
 
   let query = createServerClient()
     .from("invoices")
-    .select("id, invoice_no, created_at, counter_code, cashier_name, payment_method, item_count, grand_total", {
+    .select("id, invoice_no, created_at, counter_code, cashier_name, payment_method, item_count, grand_total, invoice_voids(reason)", {
       count: "exact",
     })
     .order("created_at", { ascending: false })
@@ -168,6 +170,7 @@ export async function listInvoices(f: InvoiceFilters): Promise<InvoiceListPage> 
       paymentMethod: r.payment_method,
       itemCount: r.item_count,
       grandTotal: r.grand_total,
+      voided: r.invoice_voids !== null,
     })),
   };
 }
@@ -263,4 +266,12 @@ export async function getInvoiceForHistory(staff: StaffContext, invoiceId: strin
   if (staff.role === "admin") return invoice;
   const own = staff.counter !== null && invoice.counterId === staff.counter.id;
   return own && istDateOf(invoice.createdAt) === todayIst() ? invoice : null;
+}
+
+/** Call only after checking access to the invoice. */
+export async function getInvoiceVoid(invoiceId: string) {
+  const { data, error } = await createServerClient().from("invoice_voids")
+    .select("voided_at, reason").eq("invoice_id", invoiceId).maybeSingle();
+  if (error) throw new Error("Could not load invoice void status.");
+  return data;
 }

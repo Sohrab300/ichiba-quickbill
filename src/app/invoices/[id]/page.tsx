@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import PageLoading from "@/components/PageLoading";
+import { VoidInvoiceButton } from "@/components/invoices/VoidInvoiceButton";
 import { ReprintButton } from "@/components/invoices/ReprintButton";
 import { Alert } from "@/components/ui/Alert";
 import { buttonClasses } from "@/components/ui/Button";
@@ -12,7 +13,7 @@ import { requireStaffForPage } from "@/lib/auth";
 import { paymentLabel } from "@/lib/constants";
 import { formatINR } from "@/lib/format";
 import type { Invoice } from "@/lib/invoice";
-import { getInvoiceForHistory } from "@/lib/invoice-history";
+import { getInvoiceForHistory, getInvoiceVoid } from "@/lib/invoice-history";
 import { toInvoiceNoSearchTerm } from "@/lib/invoice-search";
 import { parseIstDate } from "@/lib/ist-date";
 
@@ -59,10 +60,12 @@ async function InvoiceDetail({ params, searchParams }: { params: Params; searchP
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const back = backHref(sp);
 
+  let voidInfo: Awaited<ReturnType<typeof getInvoiceVoid>> = null;
   let invoice: Invoice | null = null;
   let error: string | null = null;
   try {
     invoice = await getInvoiceForHistory(staff, id);
+    if (invoice) voidInfo = await getInvoiceVoid(invoice.id);
   } catch (err: unknown) {
     console.error("Invoice detail failed", err);
     error = err instanceof Error ? err.message : "Could not load the invoice.";
@@ -90,7 +93,11 @@ async function InvoiceDetail({ params, searchParams }: { params: Params; searchP
           )}
         </div>
       ) : (
-        <InvoiceView invoice={invoice} printWidthMm={staff.counter?.printWidthMm ?? null} />
+        <>
+          {voidInfo && <Alert tone="danger"><p className="font-bold">VOID — excluded from totals and exports</p><p>{voidInfo.reason}</p><p className="text-sm">{dateTimeFormat.format(new Date(voidInfo.voided_at))}</p></Alert>}
+          {staff.role === "admin" && !voidInfo && <VoidInvoiceButton invoiceId={invoice.id} />}
+          <InvoiceView invoice={invoice} printWidthMm={staff.counter?.printWidthMm ?? null} />
+        </>
       )}
     </div>
   );

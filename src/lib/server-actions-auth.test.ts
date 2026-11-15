@@ -36,7 +36,7 @@ const actionFiles = files.map(parse).filter(isUseServerFile);
 describe("server actions check the login first", () => {
   it("finds the action files", () => {
     const names = actionFiles.map((sf) => path.relative(SRC, sf.fileName)).sort();
-    expect(names).toEqual(["lib/actions.ts", "lib/auth-actions.ts", "lib/invoice-actions.ts", "lib/settings-actions.ts"]);
+    expect(names).toEqual(["lib/actions.ts", "lib/auth-actions.ts", "lib/invoice-actions.ts", "lib/invoice-void-actions.ts", "lib/settings-actions.ts"]);
   });
 
   for (const sf of actionFiles) {
@@ -96,6 +96,7 @@ describe("route handlers check the login", () => {
 describe("admin-only actions", () => {
   const ADMIN_ONLY: Record<string, string[]> = {
     "lib/actions.ts": ["createProduct", "updateProduct", "deleteProduct", "addProductBarcode", "removeProductBarcode"],
+    "lib/invoice-void-actions.ts": ["voidInvoice"],
     "lib/settings-actions.ts": ["updateStoreSettings", "updateCounter"],
   };
   for (const [rel, names] of Object.entries(ADMIN_ONLY)) {
