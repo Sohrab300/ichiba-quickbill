@@ -23,7 +23,7 @@ const PAGE_STYLE_ID = "print-page-style";
 const PRINTING_CLASS = "printing-receipt";
 const PX_PER_MM = 96 / 25.4;
 /** Added to the measured copy height so rounding never spills a copy onto a second page. */
-const PAGE_SLACK_MM = 4;
+const PAGE_SLACK_MM = 1;
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -109,7 +109,7 @@ async function printReceipt(content: ReactNode, widthMm: PrintWidth, immediate =
   }
 }
 
-/** Prints an invoice as returned by the server: CUSTOMER COPY, page break, STORE COPY. */
+/** Prints an invoice as returned by the server: one CUSTOMER COPY. */
 export function printInvoice(
   invoice: Invoice,
   options: { widthMm: PrintWidth; reprint?: boolean; immediate?: boolean }

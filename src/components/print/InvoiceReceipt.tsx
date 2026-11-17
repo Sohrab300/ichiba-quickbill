@@ -4,13 +4,12 @@ import { formatQty, formatQtyWithUnit } from "@/lib/qty";
 import { paymentLabel } from "@/components/billing/PaymentButtons";
 
 /**
- * The printed invoice (REQUIREMENTS.md section 7): one document, two copies separated by a page
- * break. Everything on it comes from the invoice the server returned (create_invoice /
+ * The printed invoice (REQUIREMENTS.md section 7): one document containing the customer copy. Everything on it comes from the invoice the server returned (create_invoice /
  * get_invoice), including the store snapshot taken when the invoice was issued — nothing is
  * recomputed or looked up on this device. Styles: src/app/print.css.
  */
 
-const COPIES = ["CUSTOMER COPY", "STORE COPY"] as const;
+const COPIES = ["CUSTOMER COPY"] as const;
 
 const amountFormat = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
