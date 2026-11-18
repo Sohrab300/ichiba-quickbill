@@ -31,6 +31,7 @@ export function Navbar({ staff }: { staff: NavbarStaff | null }) {
     { href: "/invoices", label: "Invoices", icon: ReceiptText },
     ...(isAdmin
       ? [
+          { href: "/reports", label: "Reports", icon: ReceiptText },
           { href: "/products", label: "Products", icon: Package },
           { href: "/settings", label: "Settings", icon: Settings },
         ]
