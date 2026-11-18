@@ -55,6 +55,23 @@ The formats are:
 The Summary CSV adds up to the day totals at the top of **Invoices** for the same date and
 counter. Totals: Taxable Value + CGST + SGST + Round Off = Total.
 
+## Sales report CSV (Reports page)
+
+**Reports → Download report CSV** saves exactly the table on screen:
+`/api/exports/sales-report?from=YYYY-MM-DD&to=YYYY-MM-DD&group=hsn|gst[&counter=CL1]` (IST days,
+both included, at most 92 days; admin only). One row per HSN + GST rate (or per GST rate), in
+screen order, then a **Total** row.
+
+- Columns: HSN (only when grouped by HSN), GST Rate %, Invoices, Lines, Qty (kg), Qty (pcs),
+  Taxable Value, CGST, SGST, Total GST, Sales before round-off.
+- HSN is quoted text like in the Lines CSV; a line without an HSN is counted under `Unspecified`.
+- **Qty (kg)** sums the lines sold by weight, **Qty (pcs)** all other lines.
+- **Invoices** counts distinct bills. One bill can be in several groups, so the group counts
+  overlap; the Total row counts each bill once.
+- Sales are before invoice round-off: Taxable Value + CGST + SGST = Sales before round-off. For
+  the same day and counter, Taxable Value, CGST, SGST and the invoice count equal the Invoices
+  page day totals; its grand total also includes round-off.
+
 ## Opening a file in Excel without losing leading zeros
 
 **Double-clicking the file is fine for checking amounts. It is not fine for codes.** Excel

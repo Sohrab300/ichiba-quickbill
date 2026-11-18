@@ -132,7 +132,8 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
   };
 }
 
-function jsonError(error: string, status: number): Response {
+/** JSON error body for the export routes (never cached). */
+export function jsonError(error: string, status: number): Response {
   return Response.json({ success: false, error, statusCode: status }, { status, headers: { "Cache-Control": "no-store" } });
 }
 

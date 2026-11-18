@@ -36,7 +36,13 @@ const actionFiles = files.map(parse).filter(isUseServerFile);
 describe("server actions check the login first", () => {
   it("finds the action files", () => {
     const names = actionFiles.map((sf) => path.relative(SRC, sf.fileName)).sort();
-    expect(names).toEqual(["lib/actions.ts", "lib/auth-actions.ts", "lib/invoice-actions.ts", "lib/settings-actions.ts"]);
+    expect(names).toEqual([
+      "lib/actions.ts",
+      "lib/auth-actions.ts",
+      "lib/invoice-actions.ts",
+      "lib/report-actions.ts",
+      "lib/settings-actions.ts",
+    ]);
   });
 
   for (const sf of actionFiles) {
@@ -57,7 +63,7 @@ describe("server actions check the login first", () => {
         const body = fn.body?.getText() ?? "";
         const auth = body.indexOf("getStaffContext(");
         expect(auth, `${name} never calls getStaffContext()`).toBeGreaterThanOrEqual(0);
-        for (const dbCall of ["createServerClient(", "fetchInvoice(", ".rpc(", ".from("]) {
+        for (const dbCall of ["createServerClient(", "fetchInvoice(", "fetchSalesReport(", ".rpc(", ".from("]) {
           const at = body.indexOf(dbCall);
           if (at >= 0) expect(auth, `${name} calls ${dbCall} before getStaffContext()`).toBeLessThan(at);
         }
@@ -73,6 +79,7 @@ describe("route handlers check the login", () => {
     expect(routes.map((f) => path.relative(SRC, f)).sort()).toEqual([
       "app/api/exports/daily-lines/route.ts",
       "app/api/exports/daily-summary/route.ts",
+      "app/api/exports/sales-report/route.ts",
     ]);
   });
 
@@ -97,6 +104,7 @@ describe("admin-only actions", () => {
   const ADMIN_ONLY: Record<string, string[]> = {
     "lib/actions.ts": ["createProduct", "updateProduct", "deleteProduct", "addProductBarcode", "removeProductBarcode"],
     "lib/settings-actions.ts": ["updateStoreSettings", "updateCounter"],
+    "lib/report-actions.ts": ["getSalesReport"],
   };
   for (const [rel, names] of Object.entries(ADMIN_ONLY)) {
     const sf = parse(path.join(SRC, rel));

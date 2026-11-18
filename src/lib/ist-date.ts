@@ -49,6 +49,22 @@ export function parseIstDate(value: unknown): string | null {
   return value;
 }
 
+/** Days since 1970-01-01 of a date that passed parseIstDate() (calendar arithmetic only). */
+function dayNumber(date: string): number {
+  const [y, mo, d] = date.split("-").map(Number);
+  return Date.UTC(y, mo - 1, d) / DAY_MS;
+}
+
+/** The date `days` days after (or before, if negative) `date`: ("2026-03-01", -1) → "2026-02-28". */
+export function addIstDays(date: string, days: number): string {
+  return new Date((dayNumber(date) + days) * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** Calendar days from `from` to `to`, both included: same day → 1. Negative-or-zero when to < from. */
+export function istDaysInclusive(from: string, to: string): number {
+  return dayNumber(to) - dayNumber(from) + 1;
+}
+
 /** [from, to) covering the whole IST day, as UTC instants. `date` must pass parseIstDate(). */
 export function istDayRange(date: string): { from: Date; to: Date } {
   const [y, mo, d] = date.split("-").map(Number);

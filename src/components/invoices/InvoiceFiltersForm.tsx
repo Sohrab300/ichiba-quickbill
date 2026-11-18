@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { fieldClasses, labelClasses } from "@/components/ui/Field";
 import { cx } from "@/components/ui/cx";
+import { CounterSelect } from "./CounterSelect";
 
 interface InvoiceFiltersFormProps {
   date: string;
@@ -71,14 +72,7 @@ export function InvoiceFiltersForm({
           </label>
           <label className={labelClass}>
             Counter
-            <select name="counter" defaultValue={counterCode ?? ""} onChange={submit} className={fieldClass}>
-              <option value="">All counters</option>
-              {counterCodes.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
+            <CounterSelect name="counter" defaultValue={counterCode ?? ""} onChange={submit} counterCodes={counterCodes} />
           </label>
         </>
       )}

@@ -565,6 +565,27 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      sales_report: {
+        Args: {
+          p_counter_id?: string
+          p_from: string
+          p_group?: string
+          p_to: string
+        }
+        Returns: {
+          cgst: number
+          gst_rate: number
+          hsn: string
+          invoice_count: number
+          is_total: boolean
+          line_count: number
+          line_total: number
+          qty_kg: number
+          qty_pcs: number
+          sgst: number
+          taxable: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -142,6 +142,9 @@ imported fields for matching item codes; products not in the CSV are never touch
 - Daily sales CSV export (admin): one row per invoice line for a chosen date (IST) and optional
   counter, plus a summary export (per invoice: number, time, counter, cashier, payment method,
   taxable, CGST, SGST, round off, total). Generated on the server.
+- `/reports` (admin): sales per HSN + GST rate or per GST rate for IST days From–To (max 92 days)
+  and optional counter, with a totals row, summed in the database by `sales_report()` in one
+  request; "Download report CSV" exports exactly those rows (docs/EXPORTS.md).
 
 ## 10. Mobile (PWA)
 

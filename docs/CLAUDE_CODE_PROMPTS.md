@@ -513,6 +513,45 @@ as kg (re-scan selects the weight box).
 
 ---
 
+## Prompt 12 — Sales reports from a dedicated database function
+
+```text
+Read AGENTS.md, docs/REQUIREMENTS.md (sections 3, 9, 13, 16, 17) and the current reports feature:
+src/app/reports/page.tsx, src/app/reports/sales-report.tsx, src/lib/sales-report.ts (+ test). Today
+the page downloads /api/exports/daily-lines as CSV in the browser, parses it and sums it. Replace that
+data source with a proper aggregate API. Keep the page's look and table; change where the numbers
+come from.
+
+1. Database (NEW migration): SQL function sales_report(p_from timestamptz, p_to timestamptz,
+   p_counter_id uuid default null, p_group text) where p_group is 'hsn' or 'gst'. Group invoice_items
+   joined to invoices in the IST date range; return per group: hsn (null/'' → 'Unspecified' only for
+   display), gst_rate, invoice_count (distinct invoices), line_count, qty_kg (sum of weighed lines),
+   qty_pcs (sum of other lines), taxable, cgst, sgst, line_total — all money as integer paise sums
+   (bigint). SECURITY DEFINER, set search_path, EXECUTE only for service_role. Use set-based SQL, no
+   loops. Add an index if the plan needs one (check with EXPLAIN on a realistic local dataset).
+2. Server action getSalesReport({ from, to, counter?, group }) in src/lib/ (zod-validated, IST
+   dates YYYY-MM-DD, max range 92 days, from <= to), calling getStaffContext("admin") first. Reuse the
+   IST day-boundary helpers already used by invoices/exports.
+3. UI: replace the single date with From / To (default: today–today; quick picks Today, Yesterday,
+   This month, Last month), counter select (reuse the invoices one), HSN/GST toggle. Show a totals row.
+   "Download report CSV" button that exports exactly the rows on screen (route handler, admin only,
+   UTF-8 BOM, amounts in rupees with 2 decimals, HSN as quoted text — reuse src/lib/csv.ts).
+4. Remove parseSalesCsv/the CSV-in-the-browser path from reports (keep groupSales only if still
+   useful; otherwise delete it and its test). The Lines CSV export itself stays unchanged.
+5. Tests: unit tests for the action's validation; DB checks in the local harness (npm run test:db,
+   never production) that sales_report totals equal the sum of invoice_items for the same range,
+   including weighed and fractional lines, price-edited lines, and an empty range.
+
+Lint, typecheck, unit + db tests, build. Give me the migration name and the exact commands
+(`npx supabase db push --remote`). Do not commit.
+```
+
+**Check:** as `admin`, open Reports → Today → totals match the Invoices page day totals for the same
+counter. Switch to This month: one fast request, not one per day. Download the report CSV and compare a
+few rows with the screen.
+
+---
+
 ## Tips for running these
 
 - If Claude Code proposes a plan first, read it. If it disagrees with REQUIREMENTS.md, fix the doc
