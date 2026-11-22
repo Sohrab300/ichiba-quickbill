@@ -81,12 +81,13 @@ function summaryExporter(range: Range, filename: string): Exporter<SummaryRow> {
 }
 
 function linesExporter(range: Range, filename: string): Exporter<LineRow> {
+  const barcodes = new Map<string, string>();
   return {
     filename,
     header: [
       "Invoice No", "Date", "Time (IST)", "Counter", "Cashier", "Payment Method", "Line", "Item Code",
       "Item Name", "HSN", "UOM", "Qty", "Rate", "MRP", "GST Rate %", "Taxable Value", "CGST", "SGST",
-      "Line Total", "Catalog Price", "Charged Price", "Edited (Y/N)", "Unit",
+      "Line Total", "Catalog Price", "Charged Price", "Edited (Y/N)", "Unit", "Barcode (current catalog)",
     ],
     async fetchPage(after) {
       const { data, error } = await createServerClient().rpc("invoice_export_lines", {
@@ -99,6 +100,16 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
         p_limit: PAGE_SIZE,
       });
       if (error) throw rpcError("invoice_export_lines", error);
+      const codes = [...new Set(data.map(row => row.item_code))];
+      barcodes.clear();
+      for (let offset = 0; offset < codes.length; offset += 100) {
+        const { data: products, error: lookupError } = await createServerClient()
+          .from("products").select("item_code, product_barcodes(barcode)").in("item_code", codes.slice(offset, offset + 100));
+        if (lookupError) throw new Error(`Could not load report barcodes: ${lookupError.message}`);
+        for (const product of products ?? []) {
+          barcodes.set(product.item_code, [...new Set(product.product_barcodes.map(row => row.barcode))].sort().join(" / "));
+        }
+      }
       return data;
     },
     toCsv: (r) => {
@@ -127,6 +138,7 @@ function linesExporter(range: Range, filename: string): Exporter<LineRow> {
         paiseToRupees(r.unit_price),
         r.price_edited ? "Y" : "N",
         q.unit,
+        quoted(csvText(barcodes.get(r.item_code))),
       ];
     },
   };
