@@ -2,10 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import DailySalesReport from "./daily-sales-report";
 import { Download } from "lucide-react";
 import { getSalesReport } from "@/lib/report-actions";
 import {
-  SALES_REPORT_MAX_DAYS,
   hsnLabel,
   parseSalesReportInput,
   quantityLabel,
@@ -31,11 +31,6 @@ interface Filters {
   group: SalesReportGroup;
 }
 
-const GROUPS: { value: SalesReportGroup; label: string }[] = [
-  { value: "hsn", label: "HSN + GST rate" },
-  { value: "gst", label: "GST rate" },
-];
-
 const dayFormat = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const dayLabel = (date: string) => dayFormat.format(new Date(`${date}T00:00:00Z`));
 
@@ -59,6 +54,7 @@ export default function SalesReport({
   initial: Report | null;
   initialError: string | null;
 }) {
+  const [reportType, setReportType] = useState<"item" | "payment" | "bill" | "hsn" | "gst">("item");
   const [filters, setFilters] = useState<Filters>({ from: today, to: today, counter: "", group: "hsn" });
   const [report, setReport] = useState<Report | null>(initial);
   const [error, setError] = useState(initialError ?? "");
@@ -91,9 +87,11 @@ export default function SalesReport({
   const field = fieldClasses({ className: "w-auto num" });
   const label = cx("flex flex-col gap-1.5", labelClasses);
 
-  return <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-brand">SALES ANALYSIS</p><h1 className="font-display text-4xl font-extrabold">Sales reports</h1><p className="text-ink-muted">HSN and GST summaries from saved invoice lines, for a day or up to {SALES_REPORT_MAX_DAYS} days.</p></div><Link href="/invoices" className={buttonClasses({ variant: "secondary" })}>View invoices</Link></div>
-
+  return <><div className="mx-auto w-full max-w-7xl space-y-4 px-4 pt-6 sm:px-6"><div className="flex items-center justify-between gap-3"><h1 className="font-display text-4xl font-extrabold">Sales reports</h1><Link href="/invoices" className={buttonClasses({ variant: "secondary" })}>View invoices</Link></div><label className="flex flex-wrap items-center gap-3 font-semibold">Report type<select className={fieldClasses({ className: "w-auto" })} value={reportType} onChange={e => {
+    const next = e.target.value as typeof reportType;
+    setReportType(next);
+    if (next === "hsn" || next === "gst") load({ ...filters, group: next });
+  }}><option value="item">Item code</option><option value="payment">Payment method</option><option value="bill">Bill-wise</option><option value="hsn">HSN + GST rate</option><option value="gst">GST rate</option></select></label></div>{reportType === "item" || reportType === "payment" || reportType === "bill" ? <DailySalesReport today={today} mode={reportType} /> : <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6">
     <form onSubmit={(e) => { e.preventDefault(); load(filters); }} className={cardClasses({ raised: false, className: "space-y-4 p-4" })}>
       <div className="flex flex-wrap items-end gap-4">
         <label className={label}>From (IST)<input className={field} type="date" required value={filters.from} max={today} onChange={e => setFilters({ ...filters, from: e.target.value })} /></label>
@@ -115,9 +113,6 @@ export default function SalesReport({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div><h2 className="num text-lg font-bold">{scopeLabel(report)}</h2><p className="text-sm text-ink-muted"><span className="num">{report.total.invoiceCount.toLocaleString("en-IN")}</span> invoices · <span className="num">{report.total.lineCount.toLocaleString("en-IN")}</span> sale lines</p></div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 font-semibold" role="group" aria-label="Group by">Group by
-            {GROUPS.map(g => <button key={g.value} type="button" aria-pressed={filters.group === g.value} onClick={() => load({ ...filters, group: g.value })} className={buttonClasses({ variant: filters.group === g.value ? "ink" : "secondary", size: "sm" })}>{g.label}</button>)}
-          </div>
           {report.rows.length
             ? <a href={`/api/exports/sales-report?${salesReportCsvQuery(report)}`} download className={buttonClasses({ variant: "secondary", size: "sm", link: true })}><Download className="h-4 w-4" aria-hidden />Download report CSV</a>
             : <button type="button" disabled className={buttonClasses({ variant: "secondary", size: "sm" })}><Download className="h-4 w-4" aria-hidden />Download report CSV</button>}
@@ -134,5 +129,5 @@ export default function SalesReport({
 
       <p className="text-sm text-ink-muted">Sales are the sum of invoice lines, before invoice round-off: taxable value, CGST, SGST and the invoice count match the Invoices page for the same day and counter; its grand total also includes round-off. One invoice can appear in several groups, so group invoice counts overlap; the Total counts each invoice once. Missing HSN codes appear as Unspecified. Quantity is kg for items sold by weight and pieces for everything else. The CSV has exactly these rows and the Total.</p>
     </div> : !pending && !error && <div className="rounded-lg border border-dashed border-ink/30 p-12 text-center text-ink-muted">Choose dates and show a report to view sales by HSN or GST rate.</div>}
-  </div>;
+  </div>}</>;
 }
